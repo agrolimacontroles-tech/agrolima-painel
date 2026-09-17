@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Máquinas</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('maquinas');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Máquinas</div>
+      <div class="pagesub">Uso diário (carregadeira, tratores) e faturamento automático de hora-máquina entre empresas</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-tractor"></i> Cadastrar máquina</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup">
+          <label>Nome</label>
+          <input type="text" id="fNomeMaquina" placeholder="Ex: Trator A750, Carregadeira">
+        </div>
+        <div class="fgroup">
+          <label>Tipo</label>
+          <input type="text" id="fTipoMaquina" placeholder="Trator, Carregadeira...">
+        </div>
+        <div class="fgroup" style="justify-content:flex-end">
+          <button class="btn btn-secondary" id="btnAddMaquina"><i class="ti ti-plus"></i> Adicionar</button>
+        </div>
+      </div>
+      <div id="listaMaquinas" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-plus"></i> Novo uso</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup">
+          <label>Máquina</label>
+          <select id="fMaquina"></select>
+        </div>
+        <div class="fgroup">
+          <label>Empresa beneficiada</label>
+          <select id="fEmpresa"></select>
+        </div>
+        <div class="fgroup">
+          <label>Data</label>
+          <input type="date" id="fData">
+        </div>
+        <div class="fgroup">
+          <label>Responsável</label>
+          <input type="text" id="fResponsavel">
+        </div>
+        <div class="fgroup full">
+          <label>Serviço</label>
+          <input type="text" id="fServico">
+        </div>
+        <div class="fgroup">
+          <label>Horímetro inicial</label>
+          <input type="number" id="fHorimetroInicial" step="0.1">
+        </div>
+        <div class="fgroup">
+          <label>Horímetro final</label>
+          <input type="number" id="fHorimetroFinal" step="0.1">
+        </div>
+        <div class="fgroup">
+          <label>Valor da hora (R$)</label>
+          <input type="number" id="fValorHora" step="0.01" value="120">
+        </div>
+        <div class="fgroup">
+          <label>Abastecimento (litros)</label>
+          <input type="number" id="fAbastecimento" step="0.1">
+        </div>
+        <div class="fgroup">
+          <label>Manutenção — descrição</label>
+          <input type="text" id="fManutencaoDescricao">
+        </div>
+        <div class="fgroup">
+          <label>Manutenção — valor</label>
+          <input type="number" id="fManutencaoValor" step="0.01">
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar uso</button>
+        <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pagehead" style="margin-top:22px">
+    <div class="pagetitle" style="font-size:16px">Faturamento do mês por empresa</div>
+    <input type="month" id="filtroMes">
+  </div>
+  <div class="card">
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Empresa</th><th style="text-align:right">Horas usadas</th><th style="text-align:right">Valor a faturar</th></tr></thead>
+        <tbody id="tbodyFaturamento"><tr class="empty-row"><td colspan="3"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-list"></i> Histórico de uso</div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Máquina</th><th>Empresa</th><th>Serviço</th><th style="text-align:right">Horas</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+        <tbody id="tbodyUso"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+let EMPRESAS = [];
+let MAQUINAS = [];
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+function mesAtualISO() { return new Date().toISOString().slice(0, 7); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const [{ data: empresas }, { data: maquinas }] = await Promise.all([
+    supabaseClient.from('empresas').select('id, nome').order('nome'),
+    supabaseClient.from('maquinas').select('*').order('nome'),
+  ]);
+  EMPRESAS = empresas || [];
+  MAQUINAS = maquinas || [];
+
+  document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('fData').value = hojeISO();
+  document.getElementById('filtroMes').value = mesAtualISO();
+
+  renderMaquinas();
+  carregarUso();
+}
+
+function renderMaquinas() {
+  document.getElementById('fMaquina').innerHTML = MAQUINAS.map(m => `<option value="${m.id}">${m.nome}</option>`).join('') || '<option value="">Cadastre uma máquina primeiro</option>';
+  document.getElementById('listaMaquinas').innerHTML = MAQUINAS.map(m => `<span class="badge bg-info">${m.nome}${m.tipo ? ' — ' + m.tipo : ''}</span>`).join('');
+}
+
+document.getElementById('btnAddMaquina').addEventListener('click', async () => {
+  const nome = document.getElementById('fNomeMaquina').value.trim();
+  const tipo = document.getElementById('fTipoMaquina').value.trim() || null;
+  if (!nome) return;
+  await supabaseClient.from('maquinas').insert({ nome, tipo });
+  document.getElementById('fNomeMaquina').value = '';
+  document.getElementById('fTipoMaquina').value = '';
+  const { data } = await supabaseClient.from('maquinas').select('*').order('nome');
+  MAQUINAS = data || [];
+  renderMaquinas();
+});
+
+async function salvarUso() {
+  const maquina_id = Number(document.getElementById('fMaquina').value);
+  const empresa_beneficiada_id = Number(document.getElementById('fEmpresa').value);
+  const data = document.getElementById('fData').value;
+  const horimetro_inicial = parseFloat(document.getElementById('fHorimetroInicial').value);
+  const horimetro_final = parseFloat(document.getElementById('fHorimetroFinal').value);
+  const msg = document.getElementById('msgSalvar');
+
+  if (!maquina_id || !empresa_beneficiada_id || !data || isNaN(horimetro_inicial) || isNaN(horimetro_final)) {
+    msg.textContent = 'Preencha máquina, empresa, data e horímetros.';
+    msg.className = 'msg show error';
+    return;
+  }
+  if (horimetro_final < horimetro_inicial) {
+    msg.textContent = 'Horímetro final não pode ser menor que o inicial.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('uso_maquina').insert({
+    maquina_id, empresa_beneficiada_id, data,
+    responsavel: document.getElementById('fResponsavel').value || null,
+    servico: document.getElementById('fServico').value || null,
+    horimetro_inicial, horimetro_final,
+    valor_hora: parseFloat(document.getElementById('fValorHora').value) || 120,
+    abastecimento_litros: parseFloat(document.getElementById('fAbastecimento').value) || null,
+    manutencao_descricao: document.getElementById('fManutencaoDescricao').value || null,
+    manutencao_valor: parseFloat(document.getElementById('fManutencaoValor').value) || null,
+  });
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  msg.textContent = 'Uso salvo!';
+  msg.className = 'msg show success';
+  ['fResponsavel', 'fServico', 'fHorimetroInicial', 'fHorimetroFinal', 'fAbastecimento', 'fManutencaoDescricao', 'fManutencaoValor'].forEach(id => document.getElementById(id).value = '');
+  carregarUso();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+}
+document.getElementById('btnSalvar').addEventListener('click', salvarUso);
+document.getElementById('filtroMes').addEventListener('change', carregarUso);
+
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+function nomeMaquina(id) { return (MAQUINAS.find(m => m.id === id) || {}).nome || '—'; }
+
+async function carregarUso() {
+  const mes = document.getElementById('filtroMes').value;
+  const inicio = mes + '-01';
+  const fimData = new Date(mes + '-01T00:00:00');
+  const fim = new Date(fimData.getFullYear(), fimData.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+  const usos = await buscarPaginado(() => supabaseClient.from('uso_maquina').select('*').gte('data', inicio).lte('data', fim).order('data', { ascending: false }));
+
+  const faturamento = new Map();
+  EMPRESAS.forEach(e => faturamento.set(e.id, { nome: e.nome, horas: 0, valor: 0 }));
+  usos.forEach(u => {
+    const horas = Number(u.horas_trabalhadas ?? (u.horimetro_final - u.horimetro_inicial));
+    const registro = faturamento.get(u.empresa_beneficiada_id);
+    if (registro) { registro.horas += horas; registro.valor += horas * Number(u.valor_hora || 120); }
+  });
+
+  document.getElementById('tbodyFaturamento').innerHTML = [...faturamento.values()].filter(f => f.horas > 0).map(f => `
+    <tr><td>${f.nome}</td><td style="text-align:right">${f.horas.toFixed(1)} h</td><td style="text-align:right">${formatarMoeda(f.valor)}</td></tr>
+  `).join('') || '<tr class="empty-row"><td colspan="3">Nenhum uso registrado nesse mês.</td></tr>';
+
+  document.getElementById('tbodyUso').innerHTML = usos.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhum uso registrado nesse mês.</td></tr>'
+    : usos.map(u => {
+      const horas = Number(u.horas_trabalhadas ?? (u.horimetro_final - u.horimetro_inicial));
+      return `
+        <tr>
+          <td>${new Date(u.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+          <td>${nomeMaquina(u.maquina_id)}</td>
+          <td>${nomeEmpresa(u.empresa_beneficiada_id)}</td>
+          <td>${u.servico || '—'}</td>
+          <td style="text-align:right">${horas.toFixed(1)}</td>
+          <td style="text-align:right">${formatarMoeda(horas * Number(u.valor_hora || 120))}</td>
+          <td><button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirUso(${u.id})"><i class="ti ti-trash"></i></button></td>
+        </tr>
+      `;
+    }).join('');
+}
+
+async function excluirUso(id) {
+  await supabaseClient.from('uso_maquina').delete().eq('id', id);
+  carregarUso();
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

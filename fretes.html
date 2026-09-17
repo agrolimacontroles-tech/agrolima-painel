@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Fretes</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('fretes');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Fretes</div>
+      <div class="pagesub">Um cadastro por viagem — a minuta é só a versão impressa dele</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-plus"></i> Nova viagem</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup">
+          <label>Nº da minuta</label>
+          <input type="text" id="fNumeroMinuta">
+        </div>
+        <div class="fgroup">
+          <label>Empresa</label>
+          <select id="fEmpresa"></select>
+        </div>
+        <div class="fgroup">
+          <label>Cliente</label>
+          <input type="text" id="fCliente">
+        </div>
+        <div class="fgroup">
+          <label>CPF</label>
+          <input type="text" id="fCpf">
+        </div>
+        <div class="fgroup">
+          <label>Telefone</label>
+          <input type="text" id="fTelefone">
+        </div>
+        <div class="fgroup">
+          <label>Forma de pagamento</label>
+          <input type="text" id="fFormaPagamento">
+        </div>
+        <div class="fgroup">
+          <label>Data de embarque</label>
+          <input type="date" id="fDataEmbarque">
+        </div>
+        <div class="fgroup">
+          <label>Data de entrega</label>
+          <input type="date" id="fDataEntrega">
+        </div>
+        <div class="fgroup"></div>
+        <div class="fgroup">
+          <label>Cidade de coleta</label>
+          <input type="text" id="fCidadeColeta">
+        </div>
+        <div class="fgroup">
+          <label>Cidade de entrega</label>
+          <input type="text" id="fCidadeEntrega">
+        </div>
+        <div class="fgroup"></div>
+        <div class="fgroup">
+          <label>KM inicial</label>
+          <input type="number" id="fKmInicial" step="0.1">
+        </div>
+        <div class="fgroup">
+          <label>KM final</label>
+          <input type="number" id="fKmFinal" step="0.1">
+        </div>
+        <div class="fgroup">
+          <label>Valor por KM</label>
+          <input type="number" id="fValorPorKm" step="0.01">
+        </div>
+        <div class="fgroup">
+          <label>Adicionais (pedágio etc.)</label>
+          <input type="number" id="fAdicionais" step="0.01" value="0">
+        </div>
+        <div class="fgroup">
+          <label>Valor total</label>
+          <input type="number" id="fValorTotal" step="0.01" readonly>
+        </div>
+        <div class="fgroup"></div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar viagem</button>
+        <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-list"></i> Viagens</div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Minuta</th><th>Cliente</th><th>Data</th><th>Trajeto</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr></thead>
+        <tbody id="tbodyViagens"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+let EMPRESAS = [];
+let VIAGENS = [];
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  EMPRESAS = empresas || [];
+  document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}" ${/pontual/i.test(e.nome) ? 'selected' : ''}>${e.nome}</option>`).join('');
+  document.getElementById('fDataEmbarque').value = hojeISO();
+
+  sugerirNumeroMinuta();
+  carregarLista();
+}
+
+async function sugerirNumeroMinuta() {
+  const { data } = await supabaseClient.from('viagens').select('numero_minuta').order('id', { ascending: false }).limit(1);
+  const ano = new Date().getFullYear();
+  let proximo = 1;
+  if (data && data[0] && data[0].numero_minuta) {
+    const partes = data[0].numero_minuta.split('-');
+    const seq = parseInt(partes[1]);
+    if (!isNaN(seq)) proximo = seq + 1;
+  }
+  document.getElementById('fNumeroMinuta').value = `${ano}-${String(proximo).padStart(3, '0')}`;
+}
+
+function recalcularTotal() {
+  const kmi = parseFloat(document.getElementById('fKmInicial').value);
+  const kmf = parseFloat(document.getElementById('fKmFinal').value);
+  const valorKm = parseFloat(document.getElementById('fValorPorKm').value);
+  const adicionais = parseFloat(document.getElementById('fAdicionais').value) || 0;
+  if (!isNaN(kmi) && !isNaN(kmf) && !isNaN(valorKm)) {
+    document.getElementById('fValorTotal').value = ((kmf - kmi) * valorKm + adicionais).toFixed(2);
+  }
+}
+['fKmInicial', 'fKmFinal', 'fValorPorKm', 'fAdicionais'].forEach(id => document.getElementById(id).addEventListener('input', recalcularTotal));
+
+async function salvarViagem() {
+  const empresa_id = Number(document.getElementById('fEmpresa').value);
+  const cliente = document.getElementById('fCliente').value.trim();
+  const numero_minuta = document.getElementById('fNumeroMinuta').value.trim();
+  const msg = document.getElementById('msgSalvar');
+
+  if (!empresa_id || !cliente || !numero_minuta) {
+    msg.textContent = 'Preencha empresa, cliente e número da minuta.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('viagens').insert({
+    numero_minuta, empresa_id, cliente,
+    cpf: document.getElementById('fCpf').value || null,
+    telefone: document.getElementById('fTelefone').value || null,
+    forma_pagamento: document.getElementById('fFormaPagamento').value || null,
+    data_embarque: document.getElementById('fDataEmbarque').value || null,
+    data_entrega: document.getElementById('fDataEntrega').value || null,
+    cidade_coleta: document.getElementById('fCidadeColeta').value || null,
+    cidade_entrega: document.getElementById('fCidadeEntrega').value || null,
+    km_inicial: parseFloat(document.getElementById('fKmInicial').value) || null,
+    km_final: parseFloat(document.getElementById('fKmFinal').value) || null,
+    valor_por_km: parseFloat(document.getElementById('fValorPorKm').value) || null,
+    adicionais: parseFloat(document.getElementById('fAdicionais').value) || 0,
+    valor_total: parseFloat(document.getElementById('fValorTotal').value) || null,
+  });
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  msg.textContent = 'Viagem salva!';
+  msg.className = 'msg show success';
+  ['fCliente', 'fCpf', 'fTelefone', 'fFormaPagamento', 'fDataEntrega', 'fCidadeColeta', 'fCidadeEntrega', 'fKmInicial', 'fKmFinal', 'fValorPorKm', 'fValorTotal'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fAdicionais').value = '0';
+  sugerirNumeroMinuta();
+  carregarLista();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+}
+document.getElementById('btnSalvar').addEventListener('click', salvarViagem);
+
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+
+async function carregarLista() {
+  VIAGENS = await buscarPaginado(() => supabaseClient.from('viagens').select('*').order('data_embarque', { ascending: false }));
+
+  document.getElementById('tbodyViagens').innerHTML = VIAGENS.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhuma viagem cadastrada.</td></tr>'
+    : VIAGENS.map(v => `
+      <tr>
+        <td>${v.numero_minuta}</td>
+        <td>${v.cliente}</td>
+        <td>${v.data_embarque ? new Date(v.data_embarque + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+        <td>${v.cidade_coleta || '—'} → ${v.cidade_entrega || '—'}</td>
+        <td style="text-align:right">${formatarMoeda(v.valor_total)}</td>
+        <td>${v.status === 'recebido' ? '<span class="badge bg-success">Recebido</span>' : '<span class="badge bg-warning">Pendente</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-secondary" style="padding:4px 10px" title="Imprimir minuta" onclick="imprimirMinuta(${v.id})"><i class="ti ti-printer"></i></button>
+          ${v.status !== 'recebido' ? `<button class="btn btn-success" style="padding:4px 10px" title="Marcar recebido" onclick="marcarRecebido(${v.id})"><i class="ti ti-check"></i></button>` : ''}
+          <button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirViagem(${v.id})"><i class="ti ti-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+}
+
+async function marcarRecebido(id) {
+  await supabaseClient.from('viagens').update({ status: 'recebido', data_recebimento: hojeISO() }).eq('id', id);
+  carregarLista();
+}
+
+async function excluirViagem(id) {
+  await supabaseClient.from('viagens').delete().eq('id', id);
+  carregarLista();
+}
+
+function imprimirMinuta(id) {
+  const v = VIAGENS.find(v => v.id === id);
+  if (!v) return;
+  const janela = window.open('', '_blank');
+  janela.document.write(`
+    <html><head><title>Minuta ${v.numero_minuta}</title>
+    <style>body{font-family:Arial,sans-serif;padding:30px;color:#111} h1{font-size:20px} table{width:100%;border-collapse:collapse;margin-top:16px} td{padding:8px;border-bottom:1px solid #ccc} td:first-child{font-weight:bold;width:200px}</style>
+    </head><body>
+    <h1>MINUTA DE VIAGEM — ${v.numero_minuta}</h1>
+    <table>
+      <tr><td>Empresa</td><td>${nomeEmpresa(v.empresa_id)}</td></tr>
+      <tr><td>Cliente</td><td>${v.cliente}</td></tr>
+      <tr><td>CPF</td><td>${v.cpf || '—'}</td></tr>
+      <tr><td>Telefone</td><td>${v.telefone || '—'}</td></tr>
+      <tr><td>Forma de pagamento</td><td>${v.forma_pagamento || '—'}</td></tr>
+      <tr><td>Data de embarque</td><td>${v.data_embarque || '—'}</td></tr>
+      <tr><td>Data de entrega</td><td>${v.data_entrega || '—'}</td></tr>
+      <tr><td>Cidade de coleta</td><td>${v.cidade_coleta || '—'}</td></tr>
+      <tr><td>Cidade de entrega</td><td>${v.cidade_entrega || '—'}</td></tr>
+      <tr><td>KM inicial / final</td><td>${v.km_inicial ?? '—'} / ${v.km_final ?? '—'}</td></tr>
+      <tr><td>Valor por KM</td><td>${formatarMoeda(v.valor_por_km)}</td></tr>
+      <tr><td>Adicionais</td><td>${formatarMoeda(v.adicionais)}</td></tr>
+      <tr><td>Valor total</td><td><b>${formatarMoeda(v.valor_total)}</b></td></tr>
+    </table>
+    </body></html>
+  `);
+  janela.document.close();
+  janela.focus();
+  janela.print();
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

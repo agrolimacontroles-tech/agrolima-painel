@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Dívidas</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('dividas');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Dívidas / Financiamentos</div>
+      <div class="pagesub">Financiamentos bancários e a projeção de parcelas até a quitação</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-plus"></i> Novo financiamento</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup">
+          <label>Empresa</label>
+          <select id="fEmpresa"></select>
+        </div>
+        <div class="fgroup">
+          <label>Banco</label>
+          <input type="text" id="fBanco" placeholder="BB, SICREDI, VALTRA...">
+        </div>
+        <div class="fgroup">
+          <label>Data da contratação</label>
+          <input type="date" id="fDataContratacao">
+        </div>
+        <div class="fgroup">
+          <label>Valor total</label>
+          <input type="number" id="fValorTotal" step="0.01">
+        </div>
+        <div class="fgroup">
+          <label>Taxa de juros (% ao ano)</label>
+          <input type="number" id="fTaxaJuros" step="0.01">
+        </div>
+        <div class="fgroup">
+          <label>Número de parcelas</label>
+          <input type="number" id="fNumeroParcelas" step="1">
+        </div>
+        <div class="fgroup">
+          <label>Vencimento da 1ª parcela</label>
+          <input type="date" id="fPrimeiraParcela">
+        </div>
+        <div class="fgroup full">
+          <label>Descrição</label>
+          <input type="text" id="fDescricao" placeholder="Ex: financiamento de terra, trator, custeio...">
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar financiamento e gerar parcelas</button>
+        <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-list"></i> Financiamentos cadastrados</div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Empresa</th><th>Banco</th><th>Descrição</th><th style="text-align:right">Valor total</th><th style="text-align:right">Parcela</th><th style="text-align:right">Saldo devedor</th><th></th></tr></thead>
+        <tbody id="tbodyFinanciamentos"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="cardParcelas" style="display:none">
+    <div class="cardh"><i class="ti ti-calendar"></i> Parcelas — <span id="tituloParcelas"></span></div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Vencimento</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr></thead>
+        <tbody id="tbodyParcelas"></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+let EMPRESAS = [];
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  EMPRESAS = empresas || [];
+  document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+
+  carregarLista();
+}
+
+// Tabela Price: parcela fixa com juros compostos
+function calcularParcelaPrice(valorTotal, taxaAnual, numeroParcelas) {
+  const iMensal = Math.pow(1 + (taxaAnual / 100), 1 / 12) - 1;
+  if (iMensal === 0) return valorTotal / numeroParcelas;
+  return valorTotal * iMensal / (1 - Math.pow(1 + iMensal, -numeroParcelas));
+}
+
+function somarMeses(dataISO, n) {
+  const d = new Date(dataISO + 'T00:00:00');
+  d.setMonth(d.getMonth() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+async function salvarFinanciamento() {
+  const empresa_id = Number(document.getElementById('fEmpresa').value);
+  const banco = document.getElementById('fBanco').value.trim();
+  const data_contratacao = document.getElementById('fDataContratacao').value;
+  const valor_total = parseFloat(document.getElementById('fValorTotal').value);
+  const taxa_juros_aa = parseFloat(document.getElementById('fTaxaJuros').value) || 0;
+  const numero_parcelas = parseInt(document.getElementById('fNumeroParcelas').value);
+  const primeira_parcela_data = document.getElementById('fPrimeiraParcela').value;
+  const msg = document.getElementById('msgSalvar');
+
+  if (!empresa_id || !banco || !data_contratacao || isNaN(valor_total) || !numero_parcelas || !primeira_parcela_data) {
+    msg.textContent = 'Preencha todos os campos obrigatórios.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+
+  const { data: fin, error } = await supabaseClient.from('financiamentos').insert({
+    empresa_id, banco, data_contratacao, valor_total, taxa_juros_aa, numero_parcelas, primeira_parcela_data,
+    observacao: document.getElementById('fDescricao').value || null,
+    descricao: document.getElementById('fDescricao').value || null,
+  }).select().single();
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    btn.disabled = false;
+    return;
+  }
+
+  const valorParcela = calcularParcelaPrice(valor_total, taxa_juros_aa, numero_parcelas);
+  const parcelas = [];
+  for (let n = 1; n <= numero_parcelas; n++) {
+    parcelas.push({
+      financiamento_id: fin.id,
+      numero: n,
+      vencimento: somarMeses(primeira_parcela_data, n - 1),
+      valor: Math.round(valorParcela * 100) / 100,
+    });
+  }
+  await supabaseClient.from('financiamento_parcelas').insert(parcelas);
+
+  btn.disabled = false;
+  msg.textContent = `Financiamento salvo! Parcela mensal: ${formatarMoeda(valorParcela)}`;
+  msg.className = 'msg show success';
+  ['fBanco', 'fDataContratacao', 'fValorTotal', 'fTaxaJuros', 'fNumeroParcelas', 'fPrimeiraParcela', 'fDescricao'].forEach(id => document.getElementById(id).value = '');
+  carregarLista();
+}
+document.getElementById('btnSalvar').addEventListener('click', salvarFinanciamento);
+
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+
+async function carregarLista() {
+  const { data: financiamentos } = await supabaseClient.from('financiamentos').select('*').order('data_contratacao', { ascending: false });
+  const parcelasTodas = await buscarPaginado(() => supabaseClient.from('financiamento_parcelas').select('*'));
+
+  document.getElementById('tbodyFinanciamentos').innerHTML = (financiamentos || []).length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhum financiamento cadastrado.</td></tr>'
+    : financiamentos.map(f => {
+      const parcelasDele = parcelasTodas.filter(p => p.financiamento_id === f.id);
+      const saldoDevedor = parcelasDele.filter(p => !p.pago).reduce((s, p) => s + Number(p.valor), 0);
+      const valorParcela = parcelasDele.length ? parcelasDele[0].valor : 0;
+      return `
+        <tr>
+          <td>${nomeEmpresa(f.empresa_id)}</td>
+          <td>${f.banco}</td>
+          <td>${f.descricao || '—'}</td>
+          <td style="text-align:right">${formatarMoeda(f.valor_total)}</td>
+          <td style="text-align:right">${formatarMoeda(valorParcela)}</td>
+          <td style="text-align:right">${formatarMoeda(saldoDevedor)}</td>
+          <td><button class="btn btn-secondary" style="padding:4px 10px" onclick="verParcelas(${f.id}, '${(f.banco + ' — ' + (f.descricao || '')).replace(/'/g, "\\'")}')"><i class="ti ti-eye"></i> Ver parcelas</button></td>
+        </tr>
+      `;
+    }).join('');
+
+  window._parcelasTodas = parcelasTodas;
+}
+
+function verParcelas(financiamentoId, titulo) {
+  const parcelas = (window._parcelasTodas || []).filter(p => p.financiamento_id === financiamentoId).sort((a, b) => a.numero - b.numero);
+  document.getElementById('tituloParcelas').textContent = titulo;
+  document.getElementById('cardParcelas').style.display = '';
+  document.getElementById('tbodyParcelas').innerHTML = parcelas.map(p => `
+    <tr>
+      <td>${p.numero}</td>
+      <td>${new Date(p.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+      <td style="text-align:right">${formatarMoeda(p.valor)}</td>
+      <td>${p.pago ? '<span class="badge bg-success">Paga</span>' : '<span class="badge bg-warning">Pendente</span>'}</td>
+      <td>${!p.pago ? `<button class="btn btn-success" style="padding:4px 10px" onclick="marcarParcelaPaga(${p.id}, ${financiamentoId}, '${titulo.replace(/'/g, "\\'")}')"><i class="ti ti-check"></i></button>` : ''}</td>
+    </tr>
+  `).join('');
+  document.getElementById('cardParcelas').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function marcarParcelaPaga(id, financiamentoId, titulo) {
+  await supabaseClient.from('financiamento_parcelas').update({ pago: true, data_pagamento: hojeISO() }).eq('id', id);
+  await carregarLista();
+  verParcelas(financiamentoId, titulo);
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

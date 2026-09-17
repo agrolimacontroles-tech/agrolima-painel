@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Estoque</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('estoque');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Estoque de vacinas / insumos veterinários</div>
+      <div class="pagesub">Entradas e saídas de vacinas e medicamentos</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-plus"></i> Novo movimento</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup"><label>Produto</label><input type="text" id="fProduto"></div>
+        <div class="fgroup"><label>Tipo</label><select id="fTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
+        <div class="fgroup"><label>Quantidade</label><input type="number" id="fQuantidade" step="0.01"></div>
+        <div class="fgroup"><label>Data</label><input type="date" id="fData"></div>
+        <div class="fgroup full"><label>Observação</label><input type="text" id="fObservacao"></div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Registrar</button>
+        <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh">Estoque atual</div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Produto</th><th style="text-align:right">Quantidade atual</th></tr></thead>
+        <tbody id="tbodyEstoqueAtual"><tr class="empty-row"><td colspan="2"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh">Movimentos</div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Produto</th><th>Tipo</th><th style="text-align:right">Quantidade</th><th>Observação</th></tr></thead>
+        <tbody id="tbodyMovimentos"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+  document.getElementById('fData').value = hojeISO();
+  carregarEstoque();
+}
+
+async function salvarMovimento() {
+  const produto = document.getElementById('fProduto').value.trim();
+  const tipo = document.getElementById('fTipo').value;
+  const quantidade = parseFloat(document.getElementById('fQuantidade').value);
+  const data = document.getElementById('fData').value;
+  const msg = document.getElementById('msgSalvar');
+
+  if (!produto || isNaN(quantidade) || !data) {
+    msg.textContent = 'Preencha produto, quantidade e data.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+
+  await supabaseClient.from('estoque_vacinas_movimentos').insert({ produto, tipo, quantidade, data, observacao: document.getElementById('fObservacao').value || null });
+
+  const { data: existente } = await supabaseClient.from('estoque_vacinas').select('*').eq('produto', produto).maybeSingle();
+  const delta = tipo === 'entrada' ? quantidade : -quantidade;
+  if (existente) {
+    await supabaseClient.from('estoque_vacinas').update({ quantidade_atual: Number(existente.quantidade_atual) + delta }).eq('produto', produto);
+  } else {
+    await supabaseClient.from('estoque_vacinas').insert({ produto, quantidade_atual: delta });
+  }
+
+  btn.disabled = false;
+  msg.textContent = 'Movimento registrado!';
+  msg.className = 'msg show success';
+  ['fProduto', 'fQuantidade', 'fObservacao'].forEach(id => document.getElementById(id).value = '');
+  carregarEstoque();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+}
+document.getElementById('btnSalvar').addEventListener('click', salvarMovimento);
+
+async function carregarEstoque() {
+  const [{ data: atual }, movimentos] = await Promise.all([
+    supabaseClient.from('estoque_vacinas').select('*').order('produto'),
+    buscarPaginado(() => supabaseClient.from('estoque_vacinas_movimentos').select('*').order('data', { ascending: false })),
+  ]);
+
+  document.getElementById('tbodyEstoqueAtual').innerHTML = (atual || []).length === 0
+    ? '<tr class="empty-row"><td colspan="2">Nenhum produto registrado.</td></tr>'
+    : atual.map(a => `<tr><td>${a.produto}</td><td style="text-align:right">${a.quantidade_atual}</td></tr>`).join('');
+
+  document.getElementById('tbodyMovimentos').innerHTML = movimentos.length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhum movimento registrado.</td></tr>'
+    : movimentos.map(m => `
+      <tr>
+        <td>${new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${m.produto}</td>
+        <td>${m.tipo === 'entrada' ? '<span class="badge bg-success">Entrada</span>' : '<span class="badge bg-danger">Saída</span>'}</td>
+        <td style="text-align:right">${m.quantidade}</td><td>${m.observacao || '—'}</td>
+      </tr>
+    `).join('');
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

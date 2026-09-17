@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Calculadora</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('calculadora');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Calculadora — vender agora ou engordar mais?</div>
+      <div class="pagesub">Compara o valor de vender hoje com o valor de segurar o lote por mais alguns dias</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-calculator"></i> Simulação</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup">
+          <label>Empresa</label>
+          <select id="cEmpresa"></select>
+        </div>
+        <div class="fgroup">
+          <label>Categoria do animal</label>
+          <input type="text" id="cCategoria" placeholder="Garrote, Bezerra...">
+        </div>
+        <div class="fgroup">
+          <label>Peso atual (kg)</label>
+          <input type="number" id="cPesoAtual" step="0.1">
+        </div>
+        <div class="fgroup">
+          <label>Preço da arroba hoje (R$)</label>
+          <input type="number" id="cPrecoArroba" step="0.01">
+        </div>
+        <div class="fgroup">
+          <label>Dias adicionais de engorda a simular</label>
+          <input type="number" id="cDias" step="1" value="90">
+        </div>
+        <div class="fgroup">
+          <label>Custo diário por cabeça (R$)</label>
+          <input type="number" id="cCustoDiario" step="0.01">
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" id="btnCalcular"><i class="ti ti-calculator"></i> Calcular</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="metrics" id="resultado" style="display:none"></div>
+  <div class="card" id="cardDetalhe" style="display:none">
+    <div class="cardh">Detalhe da simulação</div>
+    <div class="cardb" id="detalheTexto"></div>
+  </div>
+
+  <div class="pagehead" style="margin-top:22px">
+    <div class="pagetitle" style="font-size:16px">Parâmetros por empresa</div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-trending-up"></i> Ganho de peso esperado por período (g/dia)</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup"><label>Empresa</label><select id="gEmpresa"></select></div>
+        <div class="fgroup"><label>Mês início</label><input type="number" id="gMesInicio" min="1" max="12"></div>
+        <div class="fgroup"><label>Mês fim</label><input type="number" id="gMesFim" min="1" max="12"></div>
+        <div class="fgroup"><label>Gramas por dia</label><input type="number" id="gGramasDia" step="1"></div>
+      </div>
+      <button class="btn btn-secondary" id="btnAddGanho"><i class="ti ti-plus"></i> Adicionar período</button>
+    </div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Empresa</th><th>Mês início</th><th>Mês fim</th><th style="text-align:right">g/dia</th><th></th></tr></thead>
+        <tbody id="tbodyGanho"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-cash"></i> Custo diário por categoria (R$/cabeça/dia)</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup"><label>Empresa</label><select id="cuEmpresa"></select></div>
+        <div class="fgroup"><label>Categoria</label><input type="text" id="cuCategoria"></div>
+        <div class="fgroup"><label>Custo/dia/cabeça</label><input type="number" id="cuCusto" step="0.01"></div>
+        <div class="fgroup"><label>Vigente desde</label><input type="date" id="cuVigenteDesde"></div>
+      </div>
+      <button class="btn btn-secondary" id="btnAddCusto"><i class="ti ti-plus"></i> Adicionar</button>
+    </div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Empresa</th><th>Categoria</th><th style="text-align:right">Custo/dia</th><th>Vigente desde</th><th></th></tr></thead>
+        <tbody id="tbodyCusto"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+const ARROBA_KG = 15;
+let EMPRESAS = [];
+let GANHOS = [];
+let CUSTOS = [];
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').eq('tem_rebanho', true).order('nome');
+  EMPRESAS = empresas || [];
+  const opcoes = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('cEmpresa').innerHTML = opcoes;
+  document.getElementById('gEmpresa').innerHTML = opcoes;
+  document.getElementById('cuEmpresa').innerHTML = opcoes;
+  document.getElementById('cuVigenteDesde').value = hojeISO();
+
+  carregarParametros();
+}
+
+async function carregarParametros() {
+  const [{ data: ganhos }, { data: custos }] = await Promise.all([
+    supabaseClient.from('parametros_ganho_peso').select('*').order('mes_inicio'),
+    supabaseClient.from('parametros_custo_diario').select('*').order('categoria'),
+  ]);
+  GANHOS = ganhos || [];
+  CUSTOS = custos || [];
+  renderGanhos();
+  renderCustos();
+}
+
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+
+function renderGanhos() {
+  document.getElementById('tbodyGanho').innerHTML = GANHOS.length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhum período cadastrado.</td></tr>'
+    : GANHOS.map(g => `
+      <tr>
+        <td>${nomeEmpresa(g.empresa_id)}</td><td>${g.mes_inicio}</td><td>${g.mes_fim}</td><td style="text-align:right">${g.gramas_dia}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirGanho(${g.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+
+function renderCustos() {
+  document.getElementById('tbodyCusto').innerHTML = CUSTOS.length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhum custo cadastrado.</td></tr>'
+    : CUSTOS.map(c => `
+      <tr>
+        <td>${nomeEmpresa(c.empresa_id)}</td><td>${c.categoria}</td><td style="text-align:right">${formatarMoeda(c.custo_dia_cabeca)}</td><td>${new Date(c.vigente_desde + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirCusto(${c.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+
+document.getElementById('btnAddGanho').addEventListener('click', async () => {
+  const empresa_id = Number(document.getElementById('gEmpresa').value);
+  const mes_inicio = parseInt(document.getElementById('gMesInicio').value);
+  const mes_fim = parseInt(document.getElementById('gMesFim').value);
+  const gramas_dia = parseFloat(document.getElementById('gGramasDia').value);
+  if (!empresa_id || !mes_inicio || !mes_fim || isNaN(gramas_dia)) return;
+  await supabaseClient.from('parametros_ganho_peso').insert({ empresa_id, mes_inicio, mes_fim, gramas_dia });
+  ['gMesInicio', 'gMesFim', 'gGramasDia'].forEach(id => document.getElementById(id).value = '');
+  carregarParametros();
+});
+async function excluirGanho(id) { await supabaseClient.from('parametros_ganho_peso').delete().eq('id', id); carregarParametros(); }
+
+document.getElementById('btnAddCusto').addEventListener('click', async () => {
+  const empresa_id = Number(document.getElementById('cuEmpresa').value);
+  const categoria = document.getElementById('cuCategoria').value.trim();
+  const custo_dia_cabeca = parseFloat(document.getElementById('cuCusto').value);
+  const vigente_desde = document.getElementById('cuVigenteDesde').value;
+  if (!empresa_id || !categoria || isNaN(custo_dia_cabeca) || !vigente_desde) return;
+  await supabaseClient.from('parametros_custo_diario').insert({ empresa_id, categoria, custo_dia_cabeca, vigente_desde });
+  document.getElementById('cuCategoria').value = '';
+  document.getElementById('cuCusto').value = '';
+  carregarParametros();
+});
+async function excluirCusto(id) { await supabaseClient.from('parametros_custo_diario').delete().eq('id', id); carregarParametros(); }
+
+// preenche custo diário automaticamente ao escolher empresa+categoria na calculadora
+function autoPreencherCusto() {
+  const empresaId = Number(document.getElementById('cEmpresa').value);
+  const categoria = document.getElementById('cCategoria').value.trim().toLowerCase();
+  const encontrado = CUSTOS.filter(c => c.empresa_id === empresaId && c.categoria.toLowerCase() === categoria)
+    .sort((a, b) => b.vigente_desde.localeCompare(a.vigente_desde))[0];
+  if (encontrado) document.getElementById('cCustoDiario').value = encontrado.custo_dia_cabeca;
+}
+document.getElementById('cEmpresa').addEventListener('change', autoPreencherCusto);
+document.getElementById('cCategoria').addEventListener('change', autoPreencherCusto);
+
+function ganhoDiaParaMes(empresaId, mes) {
+  const periodo = GANHOS.find(g => g.empresa_id === empresaId && mes >= g.mes_inicio && mes <= g.mes_fim);
+  return periodo ? Number(periodo.gramas_dia) : 0;
+}
+
+document.getElementById('btnCalcular').addEventListener('click', () => {
+  const empresaId = Number(document.getElementById('cEmpresa').value);
+  const pesoAtual = parseFloat(document.getElementById('cPesoAtual').value);
+  const precoArroba = parseFloat(document.getElementById('cPrecoArroba').value);
+  const dias = parseInt(document.getElementById('cDias').value);
+  const custoDiario = parseFloat(document.getElementById('cCustoDiario').value);
+
+  if (isNaN(pesoAtual) || isNaN(precoArroba) || !dias || isNaN(custoDiario)) {
+    alert('Preencha peso atual, preço da arroba, dias e custo diário.');
+    return;
+  }
+
+  const valorVendaAgora = (pesoAtual / ARROBA_KG) * precoArroba;
+
+  let ganhoTotalKg = 0;
+  const hoje = new Date();
+  for (let i = 0; i < dias; i++) {
+    const dia = new Date(hoje.getTime() + i * 86400000);
+    const gDia = ganhoDiaParaMes(empresaId, dia.getMonth() + 1);
+    ganhoTotalKg += gDia / 1000;
+  }
+
+  const pesoFuturo = pesoAtual + ganhoTotalKg;
+  const custoTotalPeriodo = custoDiario * dias;
+  const valorVendaFutura = (pesoFuturo / ARROBA_KG) * precoArroba;
+  const resultadoLiquidoFuturo = valorVendaFutura - custoTotalPeriodo;
+  const diferenca = resultadoLiquidoFuturo - valorVendaAgora;
+
+  document.getElementById('resultado').style.display = '';
+  document.getElementById('resultado').innerHTML = `
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-currency-dollar"></i></div><div><div class="mlabel">Vender agora</div><div class="mval">${formatarMoeda(valorVendaAgora)}</div></div></div>
+    <div class="metric"><div class="micon bg-warning"><i class="ti ti-trending-up"></i></div><div><div class="mlabel">Peso projetado em ${dias} dias</div><div class="mval">${pesoFuturo.toFixed(1)} kg</div></div></div>
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-currency-dollar"></i></div><div><div class="mlabel">Vender em ${dias} dias (líquido de custo)</div><div class="mval">${formatarMoeda(resultadoLiquidoFuturo)}</div></div></div>
+    <div class="metric"><div class="micon ${diferenca >= 0 ? 'bg-success' : 'bg-danger'}"><i class="ti ${diferenca >= 0 ? 'ti-arrow-up' : 'ti-arrow-down'}"></i></div><div><div class="mlabel">${diferenca >= 0 ? 'Compensa esperar' : 'Compensa vender agora'}</div><div class="mval">${formatarMoeda(Math.abs(diferenca))}</div></div></div>
+  `;
+
+  document.getElementById('cardDetalhe').style.display = '';
+  document.getElementById('detalheTexto').innerHTML = `
+    <p>Ganho de peso projetado: <b>${(ganhoTotalKg).toFixed(1)} kg</b> em ${dias} dias (usando os períodos de g/dia cadastrados para essa empresa).</p>
+    <p>Custo total do período: <b>${formatarMoeda(custoTotalPeriodo)}</b> (${formatarMoeda(custoDiario)}/dia × ${dias} dias).</p>
+    <p>${diferenca >= 0
+      ? `Segurar o lote por mais ${dias} dias compensa <b>${formatarMoeda(diferenca)}</b> a mais do que vender hoje, considerando o preço da arroba atual e o custo diário informado.`
+      : `Vender agora compensa <b>${formatarMoeda(-diferenca)}</b> a mais do que segurar o lote por mais ${dias} dias, considerando o preço da arroba atual e o custo diário informado.`}</p>
+    <p style="color:var(--text-dim);font-size:12px">Atenção: essa simulação assume que o preço da arroba se mantém constante durante o período — o preço real pode mudar.</p>
+  `;
+});
+
+carregarBase();
+</script>
+
+</body>
+</html>

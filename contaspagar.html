@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Contas a pagar</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('contaspagar');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Contas a pagar</div>
+      <div class="pagesub">Contas de cada empresa, com vencimento e status</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-plus"></i> Nova conta</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup">
+          <label>Empresa</label>
+          <select id="fEmpresa"></select>
+        </div>
+        <div class="fgroup">
+          <label>Prestador</label>
+          <input type="text" id="fPrestador">
+        </div>
+        <div class="fgroup">
+          <label>Vencimento</label>
+          <input type="date" id="fVencimento">
+        </div>
+        <div class="fgroup">
+          <label>Valor</label>
+          <input type="number" id="fValor" step="0.01">
+        </div>
+        <div class="fgroup">
+          <label>Forma de pagamento</label>
+          <input type="text" id="fFormaPagamento" placeholder="Pix, boleto, ...">
+        </div>
+        <div class="fgroup">
+          <label>Dados da conta / código de barras</label>
+          <input type="text" id="fDadosConta">
+        </div>
+        <div class="fgroup full">
+          <label>Motivo</label>
+          <input type="text" id="fMotivo">
+        </div>
+        <div class="fgroup full">
+          <label>Observação</label>
+          <input type="text" id="fObservacao">
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar conta</button>
+        <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pagehead" style="margin-top:22px">
+    <div class="pagetitle" style="font-size:16px">Contas cadastradas</div>
+    <div style="display:flex;gap:8px">
+      <select id="filtroEmpresa" style="min-width:220px"></select>
+      <select id="filtroStatus">
+        <option value="pendente">Pendentes</option>
+        <option value="pago">Pagas</option>
+        <option value="todas">Todas</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Vencimento</th><th>Empresa</th><th>Prestador</th><th>Motivo</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr></thead>
+        <tbody id="tbodyContas"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+let EMPRESAS = [];
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  EMPRESAS = empresas || [];
+
+  const opcoes = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('fEmpresa').innerHTML = opcoes;
+  document.getElementById('filtroEmpresa').innerHTML = `<option value="">Todas as empresas</option>` + opcoes;
+
+  carregarLista();
+}
+
+async function salvarConta() {
+  const empresa_id = Number(document.getElementById('fEmpresa').value);
+  const prestador = document.getElementById('fPrestador').value.trim();
+  const vencimento = document.getElementById('fVencimento').value;
+  const valor = parseFloat(document.getElementById('fValor').value);
+  const msg = document.getElementById('msgSalvar');
+
+  if (!empresa_id || !prestador || !vencimento || isNaN(valor)) {
+    msg.textContent = 'Preencha empresa, prestador, vencimento e valor.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('contas_a_pagar').insert({
+    empresa_id, prestador, vencimento, valor,
+    forma_pagamento: document.getElementById('fFormaPagamento').value || null,
+    dados_conta: document.getElementById('fDadosConta').value || null,
+    motivo: document.getElementById('fMotivo').value || null,
+    observacao: document.getElementById('fObservacao').value || null,
+  });
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  msg.textContent = 'Conta salva!';
+  msg.className = 'msg show success';
+  ['fPrestador', 'fVencimento', 'fValor', 'fFormaPagamento', 'fDadosConta', 'fMotivo', 'fObservacao'].forEach(id => document.getElementById(id).value = '');
+  carregarLista();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+}
+document.getElementById('btnSalvar').addEventListener('click', salvarConta);
+document.getElementById('filtroEmpresa').addEventListener('change', carregarLista);
+document.getElementById('filtroStatus').addEventListener('change', carregarLista);
+
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+
+async function carregarLista() {
+  const empresaId = document.getElementById('filtroEmpresa').value;
+  const status = document.getElementById('filtroStatus').value;
+
+  const contas = await buscarPaginado(() => {
+    let q = supabaseClient.from('contas_a_pagar').select('*').order('vencimento');
+    if (empresaId) q = q.eq('empresa_id', Number(empresaId));
+    if (status === 'pendente') q = q.eq('pago', false);
+    if (status === 'pago') q = q.eq('pago', true);
+    return q;
+  });
+
+  const hoje = hojeISO();
+  document.getElementById('tbodyContas').innerHTML = contas.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhuma conta encontrada.</td></tr>'
+    : contas.map(c => {
+      const atrasada = !c.pago && c.vencimento < hoje;
+      const statusBadge = c.pago
+        ? '<span class="badge bg-success">Paga</span>'
+        : (atrasada ? '<span class="badge bg-danger">Atrasada</span>' : '<span class="badge bg-warning">Pendente</span>');
+      return `
+        <tr>
+          <td>${new Date(c.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+          <td>${nomeEmpresa(c.empresa_id)}</td>
+          <td>${c.prestador}</td>
+          <td>${c.motivo || '—'}</td>
+          <td style="text-align:right">${formatarMoeda(c.valor)}</td>
+          <td>${statusBadge}</td>
+          <td style="white-space:nowrap">
+            ${!c.pago ? `<button class="btn btn-success" style="padding:4px 10px" title="Marcar como paga" onclick="marcarPaga(${c.id})"><i class="ti ti-check"></i></button>` : ''}
+            <button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirConta(${c.id})"><i class="ti ti-trash"></i></button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+}
+
+async function marcarPaga(id) {
+  await supabaseClient.from('contas_a_pagar').update({ pago: true, data_pagamento: hojeISO() }).eq('id', id);
+  carregarLista();
+}
+
+async function excluirConta(id) {
+  await supabaseClient.from('contas_a_pagar').delete().eq('id', id);
+  carregarLista();
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

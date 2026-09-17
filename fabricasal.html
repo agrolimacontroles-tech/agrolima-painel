@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Fábrica de Sal</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('fabricasal');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Fábrica de Sal</div>
+      <div class="pagesub">Fórmulas, produção, vendas às fazendas e estoque de insumos</div>
+    </div>
+  </div>
+
+  <div class="subtoggle">
+    <button class="stbtn active" id="btnTabFormulas" onclick="mostrarAba('formulas')">Fórmulas</button>
+    <button class="stbtn" id="btnTabProducao" onclick="mostrarAba('producao')">Produção</button>
+    <button class="stbtn" id="btnTabVendas" onclick="mostrarAba('vendas')">Vendas</button>
+    <button class="stbtn" id="btnTabEstoque" onclick="mostrarAba('estoque')">Estoque de insumos</button>
+  </div>
+
+  <div id="abaFormulas">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Nova fórmula</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Produto</label><input type="text" id="qfProduto" placeholder="Sal de Transição..."></div>
+          <div class="fgroup"><label>Insumo</label><input type="text" id="qfInsumo" placeholder="Ureia, Calcário..."></div>
+          <div class="fgroup"><label>Quantidade por lote</label><input type="number" id="qfQuantidade" step="0.01"></div>
+          <div class="fgroup"><label>Unidade</label><input type="text" id="qfUnidade" placeholder="kg, saco, %"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddFormula"><i class="ti ti-check"></i> Adicionar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Produto</th><th>Insumo</th><th style="text-align:right">Quantidade</th><th>Unidade</th><th></th></tr></thead>
+          <tbody id="tbodyFormulas"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaProducao" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Nova produção</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Data</label><input type="date" id="qpData"></div>
+          <div class="fgroup"><label>Produto</label><input type="text" id="qpProduto"></div>
+          <div class="fgroup"><label>Lote (kg)</label><input type="number" id="qpLoteKg" step="0.01"></div>
+          <div class="fgroup"><label>Custo total</label><input type="number" id="qpCustoTotal" step="0.01"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="qpObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddProducao"><i class="ti ti-check"></i> Salvar produção</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Produto</th><th style="text-align:right">Lote (kg)</th><th style="text-align:right">Custo</th><th></th></tr></thead>
+          <tbody id="tbodyProducoes"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaVendas" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Nova venda</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Data</label><input type="date" id="qvData"></div>
+          <div class="fgroup"><label>Produto</label><input type="text" id="qvProduto"></div>
+          <div class="fgroup"><label>Empresa compradora</label><select id="qvEmpresa"></select></div>
+          <div class="fgroup"><label>Quantidade</label><input type="number" id="qvQuantidade" step="0.01"></div>
+          <div class="fgroup"><label>Valor</label><input type="number" id="qvValor" step="0.01"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddVenda"><i class="ti ti-check"></i> Salvar venda</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Produto</th><th>Empresa</th><th style="text-align:right">Quantidade</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+          <tbody id="tbodyVendas"><tr class="empty-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaEstoque" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Movimento de estoque</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Insumo</label><input type="text" id="qeInsumo"></div>
+          <div class="fgroup"><label>Tipo</label><select id="qeTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
+          <div class="fgroup"><label>Quantidade</label><input type="number" id="qeQuantidade" step="0.01"></div>
+          <div class="fgroup"><label>Data</label><input type="date" id="qeData"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="qeObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddEstoque"><i class="ti ti-check"></i> Registrar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh">Estoque atual</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Insumo</th><th style="text-align:right">Quantidade atual</th></tr></thead>
+          <tbody id="tbodyEstoqueAtual"><tr class="empty-row"><td colspan="2"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh">Movimentos</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Insumo</th><th>Tipo</th><th style="text-align:right">Quantidade</th></tr></thead>
+          <tbody id="tbodyMovEstoque"><tr class="empty-row"><td colspan="4"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+`;
+
+function mostrarAba(aba) {
+  ['formulas', 'producao', 'vendas', 'estoque'].forEach(a => {
+    document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
+    document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
+  });
+}
+
+let EMPRESAS = [];
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  EMPRESAS = empresas || [];
+  document.getElementById('qvEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+
+  ['qpData', 'qvData', 'qeData'].forEach(id => document.getElementById(id).value = hojeISO());
+
+  carregarFormulas();
+  carregarProducoes();
+  carregarVendas();
+  carregarEstoque();
+}
+
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+
+// ---------- Fórmulas ----------
+document.getElementById('btnAddFormula').addEventListener('click', async () => {
+  const produto = document.getElementById('qfProduto').value.trim();
+  const insumo = document.getElementById('qfInsumo').value.trim();
+  const quantidade_por_lote = parseFloat(document.getElementById('qfQuantidade').value);
+  const unidade = document.getElementById('qfUnidade').value.trim();
+  if (!produto || !insumo || isNaN(quantidade_por_lote) || !unidade) return;
+  await supabaseClient.from('sal_formulas').insert({ produto, insumo, quantidade_por_lote, unidade });
+  ['qfProduto', 'qfInsumo', 'qfQuantidade', 'qfUnidade'].forEach(id => document.getElementById(id).value = '');
+  carregarFormulas();
+});
+
+async function carregarFormulas() {
+  const { data } = await supabaseClient.from('sal_formulas').select('*').order('produto');
+  document.getElementById('tbodyFormulas').innerHTML = (data || []).length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhuma fórmula cadastrada.</td></tr>'
+    : data.map(f => `
+      <tr>
+        <td>${f.produto}</td><td>${f.insumo}</td><td style="text-align:right">${f.quantidade_por_lote}</td><td>${f.unidade}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirFormula(${f.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+async function excluirFormula(id) { await supabaseClient.from('sal_formulas').delete().eq('id', id); carregarFormulas(); }
+
+// ---------- Produção ----------
+document.getElementById('btnAddProducao').addEventListener('click', async () => {
+  const data = document.getElementById('qpData').value;
+  const produto = document.getElementById('qpProduto').value.trim();
+  const lote_kg = parseFloat(document.getElementById('qpLoteKg').value);
+  if (!data || !produto || isNaN(lote_kg)) return;
+  await supabaseClient.from('sal_producoes').insert({
+    data, produto, lote_kg,
+    custo_total: parseFloat(document.getElementById('qpCustoTotal').value) || null,
+    observacao: document.getElementById('qpObservacao').value || null,
+  });
+  ['qpProduto', 'qpLoteKg', 'qpCustoTotal', 'qpObservacao'].forEach(id => document.getElementById(id).value = '');
+  carregarProducoes();
+});
+
+async function carregarProducoes() {
+  const data = await buscarPaginado(() => supabaseClient.from('sal_producoes').select('*').order('data', { ascending: false }));
+  document.getElementById('tbodyProducoes').innerHTML = data.length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhuma produção registrada.</td></tr>'
+    : data.map(p => `
+      <tr>
+        <td>${new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${p.produto}</td>
+        <td style="text-align:right">${p.lote_kg}</td><td style="text-align:right">${formatarMoeda(p.custo_total)}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirProducao(${p.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+async function excluirProducao(id) { await supabaseClient.from('sal_producoes').delete().eq('id', id); carregarProducoes(); }
+
+// ---------- Vendas ----------
+document.getElementById('btnAddVenda').addEventListener('click', async () => {
+  const data = document.getElementById('qvData').value;
+  const produto = document.getElementById('qvProduto').value.trim();
+  const empresa_compradora_id = Number(document.getElementById('qvEmpresa').value);
+  const quantidade = parseFloat(document.getElementById('qvQuantidade').value);
+  const valor = parseFloat(document.getElementById('qvValor').value);
+  if (!data || !produto || !empresa_compradora_id || isNaN(quantidade) || isNaN(valor)) return;
+  await supabaseClient.from('sal_vendas').insert({ data, produto, empresa_compradora_id, quantidade, valor });
+  ['qvProduto', 'qvQuantidade', 'qvValor'].forEach(id => document.getElementById(id).value = '');
+  carregarVendas();
+});
+
+async function carregarVendas() {
+  const data = await buscarPaginado(() => supabaseClient.from('sal_vendas').select('*').order('data', { ascending: false }));
+  document.getElementById('tbodyVendas').innerHTML = data.length === 0
+    ? '<tr class="empty-row"><td colspan="6">Nenhuma venda registrada.</td></tr>'
+    : data.map(v => `
+      <tr>
+        <td>${new Date(v.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${v.produto}</td><td>${nomeEmpresa(v.empresa_compradora_id)}</td>
+        <td style="text-align:right">${v.quantidade}</td><td style="text-align:right">${formatarMoeda(v.valor)}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirVenda(${v.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+async function excluirVenda(id) { await supabaseClient.from('sal_vendas').delete().eq('id', id); carregarVendas(); }
+
+// ---------- Estoque de insumos ----------
+document.getElementById('btnAddEstoque').addEventListener('click', async () => {
+  const insumo = document.getElementById('qeInsumo').value.trim();
+  const tipo = document.getElementById('qeTipo').value;
+  const quantidade = parseFloat(document.getElementById('qeQuantidade').value);
+  const data = document.getElementById('qeData').value;
+  if (!insumo || isNaN(quantidade) || !data) return;
+
+  await supabaseClient.from('sal_estoque_movimentos').insert({ insumo, tipo, quantidade, data, observacao: document.getElementById('qeObservacao').value || null });
+
+  const { data: existente } = await supabaseClient.from('sal_estoque_insumos').select('*').eq('insumo', insumo).maybeSingle();
+  const delta = tipo === 'entrada' ? quantidade : -quantidade;
+  if (existente) {
+    await supabaseClient.from('sal_estoque_insumos').update({ quantidade_atual: Number(existente.quantidade_atual) + delta }).eq('insumo', insumo);
+  } else {
+    await supabaseClient.from('sal_estoque_insumos').insert({ insumo, quantidade_atual: delta });
+  }
+
+  ['qeInsumo', 'qeQuantidade', 'qeObservacao'].forEach(id => document.getElementById(id).value = '');
+  carregarEstoque();
+});
+
+async function carregarEstoque() {
+  const [{ data: atual }, movimentos] = await Promise.all([
+    supabaseClient.from('sal_estoque_insumos').select('*').order('insumo'),
+    buscarPaginado(() => supabaseClient.from('sal_estoque_movimentos').select('*').order('data', { ascending: false })),
+  ]);
+
+  document.getElementById('tbodyEstoqueAtual').innerHTML = (atual || []).length === 0
+    ? '<tr class="empty-row"><td colspan="2">Nenhum insumo registrado.</td></tr>'
+    : atual.map(a => `<tr><td>${a.insumo}</td><td style="text-align:right">${a.quantidade_atual}</td></tr>`).join('');
+
+  document.getElementById('tbodyMovEstoque').innerHTML = movimentos.length === 0
+    ? '<tr class="empty-row"><td colspan="4">Nenhum movimento registrado.</td></tr>'
+    : movimentos.map(m => `
+      <tr>
+        <td>${new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${m.insumo}</td>
+        <td>${m.tipo === 'entrada' ? '<span class="badge bg-success">Entrada</span>' : '<span class="badge bg-danger">Saída</span>'}</td>
+        <td style="text-align:right">${m.quantidade}</td>
+      </tr>
+    `).join('');
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

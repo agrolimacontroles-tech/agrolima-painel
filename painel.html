@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('painel');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Painel</div>
+      <div class="pagesub" id="dataAtual"></div>
+    </div>
+  </div>
+
+  <div class="metrics" id="metricasMes">
+    <div class="metric"><span class="spinner"></span></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-building-bank"></i> Saldo do mês por empresa</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Empresa</th><th style="text-align:right">Despesas</th><th style="text-align:right">Receitas</th><th style="text-align:right">Saldo</th></tr></thead>
+          <tbody id="tbodySaldoEmpresa"><tr class="empty-row"><td colspan="4"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-calendar-due"></i> Próximos vencimentos (30 dias)</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Vencimento</th><th>Descrição</th><th>Empresa</th><th style="text-align:right">Valor</th></tr></thead>
+          <tbody id="tbodyVencimentos"><tr class="empty-row"><td colspan="4"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+`;
+
+document.getElementById('dataAtual').textContent = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+async function carregarPainel() {
+  await checkAuth();
+  showUserEmail();
+
+  const hoje = new Date();
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
+  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const em30dias = new Date(hoje.getTime() + 30 * 86400000).toISOString().slice(0, 10);
+  const hojeISO = hoje.toISOString().slice(0, 10);
+
+  const [empresas, contas, lancamentosMes, contasPagar, parcelas] = await Promise.all([
+    supabaseClient.from('empresas').select('id, nome').order('nome').then(r => r.data || []),
+    supabaseClient.from('contas').select('id, tipo').then(r => r.data || []),
+    buscarPaginado(() => supabaseClient.from('lancamentos').select('empresa_id, conta_id, valor_total').gte('data', inicioMes).lte('data', fimMes)),
+    supabaseClient.from('contas_a_pagar').select('empresa_id, prestador, valor, vencimento').eq('pago', false).gte('vencimento', hojeISO).lte('vencimento', em30dias).order('vencimento'),
+    supabaseClient.from('financiamento_parcelas').select('vencimento, valor, financiamento_id, financiamentos(empresa_id, banco, descricao)').eq('pago', false).gte('vencimento', hojeISO).lte('vencimento', em30dias).order('vencimento'),
+  ]);
+
+  const tipoPorConta = new Map(contas.map(c => [c.id, c.tipo]));
+
+  let totalDespesas = 0, totalReceitas = 0;
+  const porEmpresa = new Map();
+  empresas.forEach(e => porEmpresa.set(e.id, { nome: e.nome, despesa: 0, receita: 0 }));
+
+  lancamentosMes.forEach(l => {
+    const tipo = tipoPorConta.get(l.conta_id);
+    const valor = Number(l.valor_total) || 0;
+    const registro = porEmpresa.get(l.empresa_id);
+    if (!registro) return;
+    if (tipo === 'receita') { registro.receita += valor; totalReceitas += valor; }
+    else { registro.despesa += valor; totalDespesas += valor; } // despesa + investimento contam como saída
+  });
+
+  document.getElementById('metricasMes').innerHTML = `
+    <div class="metric"><div class="micon bg-danger"><i class="ti ti-arrow-down"></i></div><div><div class="mlabel">Saídas do mês (todas empresas)</div><div class="mval">${formatarMoeda(totalDespesas)}</div></div></div>
+    <div class="metric"><div class="micon bg-success"><i class="ti ti-arrow-up"></i></div><div><div class="mlabel">Entradas do mês (todas empresas)</div><div class="mval">${formatarMoeda(totalReceitas)}</div></div></div>
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-scale"></i></div><div><div class="mlabel">Saldo do mês</div><div class="mval">${formatarMoeda(totalReceitas - totalDespesas)}</div></div></div>
+    <div class="metric"><div class="micon bg-warning"><i class="ti ti-calendar-due"></i></div><div><div class="mlabel">A vencer em 30 dias</div><div class="mval">${formatarMoeda((contasPagar.data || []).reduce((s, c) => s + Number(c.valor), 0) + (parcelas.data || []).reduce((s, p) => s + Number(p.valor), 0))}</div></div></div>
+  `;
+
+  document.getElementById('tbodySaldoEmpresa').innerHTML = [...porEmpresa.values()].map(e => `
+    <tr>
+      <td>${e.nome}</td>
+      <td style="text-align:right">${formatarMoeda(e.despesa)}</td>
+      <td style="text-align:right">${formatarMoeda(e.receita)}</td>
+      <td style="text-align:right;color:${e.receita - e.despesa >= 0 ? 'var(--success)' : 'var(--danger)'}">${formatarMoeda(e.receita - e.despesa)}</td>
+    </tr>
+  `).join('');
+
+  const nomeEmpresa = id => (empresas.find(e => e.id === id) || {}).nome || '—';
+
+  const vencimentos = [
+    ...(contasPagar.data || []).map(c => ({ vencimento: c.vencimento, descricao: c.prestador, empresa: nomeEmpresa(c.empresa_id), valor: c.valor })),
+    ...(parcelas.data || []).map(p => ({ vencimento: p.vencimento, descricao: (p.financiamentos ? p.financiamentos.banco + ' — ' + (p.financiamentos.descricao || 'financiamento') : 'Financiamento'), empresa: nomeEmpresa(p.financiamentos ? p.financiamentos.empresa_id : null), valor: p.valor })),
+  ].sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+
+  document.getElementById('tbodyVencimentos').innerHTML = vencimentos.length === 0
+    ? '<tr class="empty-row"><td colspan="4">Nenhum vencimento nos próximos 30 dias.</td></tr>'
+    : vencimentos.map(v => `
+      <tr>
+        <td>${new Date(v.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td>${v.descricao}</td>
+        <td>${v.empresa}</td>
+        <td style="text-align:right">${formatarMoeda(v.valor)}</td>
+      </tr>
+    `).join('');
+}
+
+carregarPainel();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Lima Bank</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('limabank');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Lima Bank</div>
+      <div class="pagesub">Tesouraria interna do grupo — empréstimos entre empresas e movimentos com bancos externos</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-plus"></i> Novo movimento</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup">
+          <label>Direção</label>
+          <select id="fDirecao">
+            <option value="lima_para_empresa">Lima Bank emprestou para empresa</option>
+            <option value="empresa_para_lima">Empresa devolveu/depositou no Lima Bank</option>
+            <option value="banco_para_lima">Recebido de banco externo</option>
+            <option value="lima_para_banco">Pago para banco externo</option>
+          </select>
+        </div>
+        <div class="fgroup" id="grupoEmpresa">
+          <label>Empresa</label>
+          <select id="fEmpresa"></select>
+        </div>
+        <div class="fgroup" id="grupoBanco" style="display:none">
+          <label>Banco externo</label>
+          <select id="fBancoExterno">
+            <option value="SICOOB">SICOOB</option>
+            <option value="SICREDI">SICREDI</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div class="fgroup">
+          <label>Data</label>
+          <input type="date" id="fData">
+        </div>
+        <div class="fgroup">
+          <label>Valor</label>
+          <input type="number" id="fValor" step="0.01">
+        </div>
+        <div class="fgroup full">
+          <label>Observação</label>
+          <input type="text" id="fObservacao">
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar movimento</button>
+        <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-scale"></i> Situação por empresa</div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Empresa</th><th style="text-align:right">Recebeu do Lima Bank</th><th style="text-align:right">Devolveu ao Lima Bank</th><th style="text-align:right">Situação</th></tr></thead>
+        <tbody id="tbodySituacao"><tr class="empty-row"><td colspan="4"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-list"></i> Histórico de movimentos</div>
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>De</th><th>Para</th><th>Tipo</th><th style="text-align:right">Valor</th><th>Observação</th><th></th></tr></thead>
+        <tbody id="tbodyMovimentos"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+const LIMA_BANK_ID_NOME = 'Lima Bank';
+let EMPRESAS = [];
+let LIMA_BANK_ID = null;
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  EMPRESAS = empresas || [];
+  LIMA_BANK_ID = (EMPRESAS.find(e => e.nome === LIMA_BANK_ID_NOME) || {}).id;
+
+  const opcoesEmpresas = EMPRESAS.filter(e => e.id !== LIMA_BANK_ID).map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('fEmpresa').innerHTML = opcoesEmpresas;
+  document.getElementById('fData').value = hojeISO();
+
+  atualizarCamposDirecao();
+  carregarSituacaoEHistorico();
+}
+
+function atualizarCamposDirecao() {
+  const direcao = document.getElementById('fDirecao').value;
+  const precisaEmpresa = direcao === 'lima_para_empresa' || direcao === 'empresa_para_lima';
+  document.getElementById('grupoEmpresa').style.display = precisaEmpresa ? '' : 'none';
+  document.getElementById('grupoBanco').style.display = precisaEmpresa ? 'none' : '';
+}
+document.getElementById('fDirecao').addEventListener('change', atualizarCamposDirecao);
+
+async function salvarMovimento() {
+  const direcao = document.getElementById('fDirecao').value;
+  const data = document.getElementById('fData').value;
+  const valor = parseFloat(document.getElementById('fValor').value);
+  const observacao = document.getElementById('fObservacao').value || null;
+  const msg = document.getElementById('msgSalvar');
+
+  if (!data || isNaN(valor)) {
+    msg.textContent = 'Preencha data e valor.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  let payload = { data, valor, observacao };
+
+  if (direcao === 'lima_para_empresa') {
+    payload.empresa_origem_id = LIMA_BANK_ID;
+    payload.empresa_destino_id = Number(document.getElementById('fEmpresa').value);
+    payload.tipo = 'emprestimo';
+  } else if (direcao === 'empresa_para_lima') {
+    payload.empresa_origem_id = Number(document.getElementById('fEmpresa').value);
+    payload.empresa_destino_id = LIMA_BANK_ID;
+    payload.tipo = 'pagamento';
+  } else if (direcao === 'banco_para_lima') {
+    payload.empresa_destino_id = LIMA_BANK_ID;
+    payload.banco_externo = document.getElementById('fBancoExterno').value;
+    payload.tipo = 'aporte_externo';
+  } else if (direcao === 'lima_para_banco') {
+    payload.empresa_origem_id = LIMA_BANK_ID;
+    payload.banco_externo = document.getElementById('fBancoExterno').value;
+    payload.tipo = 'saida_externa';
+  }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('movimentos_lima_bank').insert(payload);
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  msg.textContent = 'Movimento salvo!';
+  msg.className = 'msg show success';
+  document.getElementById('fValor').value = '';
+  document.getElementById('fObservacao').value = '';
+  carregarSituacaoEHistorico();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+}
+document.getElementById('btnSalvar').addEventListener('click', salvarMovimento);
+
+function nomeEmpresa(id) {
+  if (id === null || id === undefined) return null;
+  return (EMPRESAS.find(e => e.id === id) || {}).nome || '—';
+}
+
+async function carregarSituacaoEHistorico() {
+  const movimentos = await buscarPaginado(() => supabaseClient.from('movimentos_lima_bank').select('*').order('data', { ascending: false }));
+
+  const situacao = new Map();
+  EMPRESAS.filter(e => e.id !== LIMA_BANK_ID).forEach(e => situacao.set(e.id, { nome: e.nome, recebeu: 0, devolveu: 0 }));
+
+  movimentos.forEach(m => {
+    if (m.tipo === 'emprestimo' && situacao.has(m.empresa_destino_id)) situacao.get(m.empresa_destino_id).recebeu += Number(m.valor);
+    if (m.tipo === 'pagamento' && situacao.has(m.empresa_origem_id)) situacao.get(m.empresa_origem_id).devolveu += Number(m.valor);
+  });
+
+  document.getElementById('tbodySituacao').innerHTML = [...situacao.values()].map(s => {
+    const saldo = s.recebeu - s.devolveu;
+    const situacaoTexto = saldo > 0 ? `Deve ${formatarMoeda(saldo)}` : (saldo < 0 ? `A receber ${formatarMoeda(-saldo)}` : 'Quitado');
+    return `
+      <tr>
+        <td>${s.nome}</td>
+        <td style="text-align:right">${formatarMoeda(s.recebeu)}</td>
+        <td style="text-align:right">${formatarMoeda(s.devolveu)}</td>
+        <td style="text-align:right;color:${saldo > 0 ? 'var(--warning)' : 'var(--success)'}">${situacaoTexto}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const labelTipo = { emprestimo: 'Empréstimo', pagamento: 'Pagamento', aporte_externo: 'Aporte externo', saida_externa: 'Saída externa' };
+
+  document.getElementById('tbodyMovimentos').innerHTML = movimentos.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhum movimento registrado.</td></tr>'
+    : movimentos.map(m => `
+      <tr>
+        <td>${new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td>${nomeEmpresa(m.empresa_origem_id) || m.banco_externo || '—'}</td>
+        <td>${nomeEmpresa(m.empresa_destino_id) || m.banco_externo || '—'}</td>
+        <td>${labelTipo[m.tipo] || m.tipo}</td>
+        <td style="text-align:right">${formatarMoeda(m.valor)}</td>
+        <td>${m.observacao || '—'}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirMovimento(${m.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+
+async function excluirMovimento(id) {
+  await supabaseClient.from('movimentos_lima_bank').delete().eq('id', id);
+  carregarSituacaoEHistorico();
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

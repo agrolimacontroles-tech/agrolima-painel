@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Lançamentos</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('lancamentos');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Lançamentos</div>
+      <div class="pagesub">Despesas, investimentos e receitas de cada empresa</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-plus"></i> Novo lançamento</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup">
+          <label>Empresa</label>
+          <select id="fEmpresa"></select>
+        </div>
+        <div class="fgroup">
+          <label>Data</label>
+          <input type="date" id="fData">
+        </div>
+        <div class="fgroup">
+          <label>Tipo</label>
+          <select id="fTipo">
+            <option value="despesa">Despesa</option>
+            <option value="investimento">Investimento</option>
+            <option value="receita">Receita</option>
+          </select>
+        </div>
+        <div class="fgroup">
+          <label>Conta</label>
+          <select id="fConta"></select>
+        </div>
+        <div class="fgroup full">
+          <label>Histórico</label>
+          <input type="text" id="fHistorico" placeholder="Descrição do lançamento">
+        </div>
+        <div class="fgroup">
+          <label>Quantidade</label>
+          <input type="number" id="fQuantidade" step="any" placeholder="opcional">
+        </div>
+        <div class="fgroup">
+          <label>Valor unitário</label>
+          <input type="number" id="fValorUnitario" step="0.01" placeholder="opcional">
+        </div>
+        <div class="fgroup">
+          <label>Valor total</label>
+          <input type="number" id="fValorTotal" step="0.01">
+        </div>
+        <div class="fgroup">
+          <label>Fornecedor / Comprador</label>
+          <input type="text" id="fFornecedor">
+        </div>
+        <div class="fgroup full">
+          <label>Observação</label>
+          <input type="text" id="fObservacao">
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar lançamento</button>
+        <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pagehead" style="margin-top:22px">
+    <div class="pagetitle" style="font-size:16px">Lançamentos do mês</div>
+    <div style="display:flex;gap:8px">
+      <select id="filtroEmpresa" style="min-width:220px"></select>
+      <input type="month" id="filtroMes">
+    </div>
+  </div>
+
+  <div class="metrics" id="resumoMes"></div>
+
+  <div class="card">
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Tipo</th><th>Conta</th><th>Histórico</th><th>Fornecedor/Comprador</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+        <tbody id="tbodyLancamentos"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+let EMPRESAS = [];
+let CONTAS = [];
+
+function hojeISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function mesAtualISO() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const [{ data: empresas }, { data: contas }] = await Promise.all([
+    supabaseClient.from('empresas').select('id, nome').order('nome'),
+    supabaseClient.from('contas').select('id, empresa_id, tipo, codigo, nome').order('codigo'),
+  ]);
+
+  EMPRESAS = empresas || [];
+  CONTAS = contas || [];
+
+  const optionsEmpresas = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('fEmpresa').innerHTML = optionsEmpresas;
+  document.getElementById('filtroEmpresa').innerHTML = `<option value="">Todas as empresas</option>` + optionsEmpresas;
+
+  document.getElementById('fData').value = hojeISO();
+  document.getElementById('filtroMes').value = mesAtualISO();
+
+  atualizarOpcoesConta();
+  carregarLista();
+}
+
+function atualizarOpcoesConta() {
+  const empresaId = Number(document.getElementById('fEmpresa').value);
+  const tipo = document.getElementById('fTipo').value;
+  const opcoes = CONTAS
+    .filter(c => c.empresa_id === empresaId && c.tipo === tipo)
+    .map(c => `<option value="${c.id}">${c.codigo} — ${c.nome}</option>`)
+    .join('');
+  document.getElementById('fConta').innerHTML = opcoes || '<option value="">Nenhuma conta cadastrada</option>';
+}
+
+document.getElementById('fEmpresa').addEventListener('change', atualizarOpcoesConta);
+document.getElementById('fTipo').addEventListener('change', atualizarOpcoesConta);
+
+function recalcularValorTotal() {
+  const qtd = parseFloat(document.getElementById('fQuantidade').value);
+  const unit = parseFloat(document.getElementById('fValorUnitario').value);
+  if (!isNaN(qtd) && !isNaN(unit)) {
+    document.getElementById('fValorTotal').value = (qtd * unit).toFixed(2);
+  }
+}
+document.getElementById('fQuantidade').addEventListener('input', recalcularValorTotal);
+document.getElementById('fValorUnitario').addEventListener('input', recalcularValorTotal);
+
+async function salvarLancamento() {
+  const empresa_id = Number(document.getElementById('fEmpresa').value);
+  const conta_id = Number(document.getElementById('fConta').value);
+  const data = document.getElementById('fData').value;
+  const valor_total = parseFloat(document.getElementById('fValorTotal').value);
+  const msg = document.getElementById('msgSalvar');
+
+  if (!empresa_id || !conta_id || !data || isNaN(valor_total)) {
+    msg.textContent = 'Preencha empresa, conta, data e valor total.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+
+  const { error } = await supabaseClient.from('lancamentos').insert({
+    empresa_id,
+    conta_id,
+    data,
+    historico: document.getElementById('fHistorico').value || null,
+    quantidade: parseFloat(document.getElementById('fQuantidade').value) || null,
+    valor_unitario: parseFloat(document.getElementById('fValorUnitario').value) || null,
+    valor_total,
+    fornecedor_comprador: document.getElementById('fFornecedor').value || null,
+    observacao: document.getElementById('fObservacao').value || null,
+  });
+
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  msg.textContent = 'Lançamento salvo!';
+  msg.className = 'msg show success';
+  ['fHistorico', 'fQuantidade', 'fValorUnitario', 'fValorTotal', 'fFornecedor', 'fObservacao'].forEach(id => document.getElementById(id).value = '');
+  carregarLista();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+}
+
+document.getElementById('btnSalvar').addEventListener('click', salvarLancamento);
+
+document.getElementById('filtroEmpresa').addEventListener('change', carregarLista);
+document.getElementById('filtroMes').addEventListener('change', carregarLista);
+
+function nomeConta(conta_id) {
+  const c = CONTAS.find(c => c.id === conta_id);
+  return c ? `${c.codigo} — ${c.nome}` : '—';
+}
+
+function tipoConta(conta_id) {
+  const c = CONTAS.find(c => c.id === conta_id);
+  return c ? c.tipo : '';
+}
+
+function labelTipo(tipo) {
+  return { despesa: 'Despesa', investimento: 'Investimento', receita: 'Receita' }[tipo] || tipo;
+}
+
+async function carregarLista() {
+  const empresaId = document.getElementById('filtroEmpresa').value;
+  const mes = document.getElementById('filtroMes').value; // 'YYYY-MM'
+  const inicio = mes + '-01';
+  const fimData = new Date(mes + '-01T00:00:00');
+  const fim = new Date(fimData.getFullYear(), fimData.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+  let query = supabaseClient.from('lancamentos').select('*').gte('data', inicio).lte('data', fim).order('data', { ascending: false });
+  if (empresaId) query = query.eq('empresa_id', Number(empresaId));
+
+  const dados = await buscarPaginado(() => {
+    let q = supabaseClient.from('lancamentos').select('*').gte('data', inicio).lte('data', fim).order('data', { ascending: false });
+    if (empresaId) q = q.eq('empresa_id', Number(empresaId));
+    return q;
+  });
+
+  renderResumo(dados);
+  renderTabela(dados);
+}
+
+function renderResumo(dados) {
+  const totais = { despesa: 0, investimento: 0, receita: 0 };
+  dados.forEach(l => {
+    const tipo = tipoConta(l.conta_id);
+    if (totais[tipo] !== undefined) totais[tipo] += Number(l.valor_total) || 0;
+  });
+  const saldo = totais.receita - totais.despesa - totais.investimento;
+
+  document.getElementById('resumoMes').innerHTML = `
+    <div class="metric"><div class="micon bg-danger"><i class="ti ti-arrow-down"></i></div><div><div class="mlabel">Despesas</div><div class="mval">${formatarMoeda(totais.despesa)}</div></div></div>
+    <div class="metric"><div class="micon bg-warning"><i class="ti ti-building-warehouse"></i></div><div><div class="mlabel">Investimentos</div><div class="mval">${formatarMoeda(totais.investimento)}</div></div></div>
+    <div class="metric"><div class="micon bg-success"><i class="ti ti-arrow-up"></i></div><div><div class="mlabel">Receitas</div><div class="mval">${formatarMoeda(totais.receita)}</div></div></div>
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-scale"></i></div><div><div class="mlabel">Saldo do mês</div><div class="mval">${formatarMoeda(saldo)}</div></div></div>
+  `;
+}
+
+function renderTabela(dados) {
+  const tbody = document.getElementById('tbodyLancamentos');
+  if (dados.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Nenhum lançamento nesse período.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = dados.map(l => `
+    <tr>
+      <td>${new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+      <td>${labelTipo(tipoConta(l.conta_id))}</td>
+      <td>${nomeConta(l.conta_id)}</td>
+      <td>${l.historico || '—'}</td>
+      <td>${l.fornecedor_comprador || '—'}</td>
+      <td style="text-align:right">${formatarMoeda(l.valor_total)}</td>
+      <td><button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirLancamento(${l.id})"><i class="ti ti-trash"></i></button></td>
+    </tr>
+  `).join('');
+}
+
+async function excluirLancamento(id) {
+  if (!confirm('Excluir este lançamento?')) return;
+  await supabaseClient.from('lancamentos').delete().eq('id', id);
+  carregarLista();
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>
