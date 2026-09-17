@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Fluxo de Caixa</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('fluxocaixa');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Fluxo de Caixa</div>
+      <div class="pagesub">Mês a mês, passado (realizado) e futuro (previsto) — pra enxergar com antecedência onde vai apertar</div>
+    </div>
+    <select id="filtroEmpresa" style="min-width:240px"></select>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-wallet"></i> Saldo inicial (ponto de partida do acumulado)</div>
+    <div class="cardb">
+      <div class="frow cols-3">
+        <div class="fgroup"><label>Valor</label><input type="number" id="fSaldoValor" step="0.01"></div>
+        <div class="fgroup"><label>Data de referência</label><input type="date" id="fSaldoData"></div>
+        <div class="fgroup" style="justify-content:flex-end"><button class="btn btn-secondary" id="btnSalvarSaldo"><i class="ti ti-check"></i> Salvar</button></div>
+      </div>
+      <span id="msgSaldo" class="msg" style="display:inline-block"></span>
+    </div>
+  </div>
+
+  <div class="metrics" id="metricasFluxo"></div>
+
+  <div class="card">
+    <div class="cardb table-wrap">
+      <table>
+        <thead><tr><th>Mês</th><th></th><th style="text-align:right">Receitas</th><th style="text-align:right">Despesas + Investimentos</th><th style="text-align:right">Saídas previstas (a pagar/parcelas)</th><th style="text-align:right">Saldo do mês</th><th style="text-align:right">Saldo acumulado</th></tr></thead>
+        <tbody id="tbodyFluxo"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+let EMPRESAS = [];
+const MESES_PASSADO = 3;
+const MESES_FUTURO = 12;
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  EMPRESAS = empresas || [];
+
+  document.getElementById('filtroEmpresa').innerHTML = `<option value="">Consolidado (todas as empresas)</option>` +
+    EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+
+  document.getElementById('fSaldoData').value = hojeISO();
+
+  await carregarSaldoInicial();
+  await carregarFluxo();
+}
+document.getElementById('filtroEmpresa').addEventListener('change', async () => {
+  await carregarSaldoInicial();
+  await carregarFluxo();
+});
+
+async function carregarSaldoInicial() {
+  const empresaId = document.getElementById('filtroEmpresa').value;
+  if (!empresaId) {
+    document.getElementById('fSaldoValor').value = '';
+    document.getElementById('fSaldoValor').disabled = true;
+    document.getElementById('btnSalvarSaldo').disabled = true;
+    return;
+  }
+  document.getElementById('fSaldoValor').disabled = false;
+  document.getElementById('btnSalvarSaldo').disabled = false;
+  const { data } = await supabaseClient.from('saldo_inicial').select('*').eq('empresa_id', Number(empresaId)).maybeSingle();
+  document.getElementById('fSaldoValor').value = data ? data.valor : 0;
+  document.getElementById('fSaldoData').value = data ? data.data_referencia : hojeISO();
+}
+
+document.getElementById('btnSalvarSaldo').addEventListener('click', async () => {
+  const empresaId = Number(document.getElementById('filtroEmpresa').value);
+  const valor = parseFloat(document.getElementById('fSaldoValor').value) || 0;
+  const data_referencia = document.getElementById('fSaldoData').value;
+  const msg = document.getElementById('msgSaldo');
+  if (!empresaId) return;
+
+  const { error } = await supabaseClient.from('saldo_inicial').upsert({ empresa_id: empresaId, valor, data_referencia });
+  msg.textContent = error ? 'Erro ao salvar: ' + error.message : 'Saldo inicial salvo!';
+  msg.className = error ? 'msg show error' : 'msg show success';
+  carregarFluxo();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+function mesLabel(ano, mes) {
+  return new Date(ano, mes - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+}
+
+async function carregarFluxo() {
+  const empresaIdFiltro = document.getElementById('filtroEmpresa').value ? Number(document.getElementById('filtroEmpresa').value) : null;
+
+  const hoje = new Date();
+  const inicioJanela = new Date(hoje.getFullYear(), hoje.getMonth() - MESES_PASSADO, 1);
+  const fimJanela = new Date(hoje.getFullYear(), hoje.getMonth() + MESES_FUTURO + 1, 0);
+  const inicioISO = inicioJanela.toISOString().slice(0, 10);
+  const fimISO = fimJanela.toISOString().slice(0, 10);
+
+  const [contas, lancamentos, contasPagar, parcelas, saldosIniciais] = await Promise.all([
+    supabaseClient.from('contas').select('id, tipo').then(r => r.data || []),
+    buscarPaginado(() => {
+      let q = supabaseClient.from('lancamentos').select('empresa_id, conta_id, data, valor_total').gte('data', inicioISO).lte('data', fimISO);
+      if (empresaIdFiltro) q = q.eq('empresa_id', empresaIdFiltro);
+      return q;
+    }),
+    (() => {
+      let q = supabaseClient.from('contas_a_pagar').select('empresa_id, vencimento, valor').eq('pago', false).gte('vencimento', inicioISO).lte('vencimento', fimISO);
+      if (empresaIdFiltro) q = q.eq('empresa_id', empresaIdFiltro);
+      return q.then(r => r.data || []);
+    })(),
+    buscarPaginado(() => {
+      let q = supabaseClient.from('financiamento_parcelas').select('vencimento, valor, financiamentos!inner(empresa_id)').eq('pago', false).gte('vencimento', inicioISO).lte('vencimento', fimISO);
+      if (empresaIdFiltro) q = q.eq('financiamentos.empresa_id', empresaIdFiltro);
+      return q;
+    }),
+    supabaseClient.from('saldo_inicial').select('*').then(r => r.data || []),
+  ]);
+
+  const tipoPorConta = new Map(contas.map(c => [c.id, c.tipo]));
+
+  // meses da janela
+  const meses = [];
+  let cursor = new Date(inicioJanela);
+  while (cursor <= fimJanela) {
+    meses.push({ ano: cursor.getFullYear(), mes: cursor.getMonth() + 1 });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+
+  const chave = (ano, mes) => `${ano}-${String(mes).padStart(2, '0')}`;
+  const porMes = new Map(meses.map(m => [chave(m.ano, m.mes), { receitas: 0, saidasRealizadas: 0, saidasPrevistas: 0 }]));
+
+  lancamentos.forEach(l => {
+    const d = new Date(l.data + 'T00:00:00');
+    const k = chave(d.getFullYear(), d.getMonth() + 1);
+    const registro = porMes.get(k);
+    if (!registro) return;
+    const tipo = tipoPorConta.get(l.conta_id);
+    if (tipo === 'receita') registro.receitas += Number(l.valor_total) || 0;
+    else registro.saidasRealizadas += Number(l.valor_total) || 0;
+  });
+
+  const mesAtualNum = hoje.getFullYear() * 12 + hoje.getMonth();
+  contasPagar.forEach(c => {
+    const d = new Date(c.vencimento + 'T00:00:00');
+    if (d.getFullYear() * 12 + d.getMonth() <= mesAtualNum) return; // só conta como "previsto" em meses futuros
+    const k = chave(d.getFullYear(), d.getMonth() + 1);
+    const registro = porMes.get(k);
+    if (registro) registro.saidasPrevistas += Number(c.valor) || 0;
+  });
+  parcelas.forEach(p => {
+    const d = new Date(p.vencimento + 'T00:00:00');
+    if (d.getFullYear() * 12 + d.getMonth() <= mesAtualNum) return;
+    const k = chave(d.getFullYear(), d.getMonth() + 1);
+    const registro = porMes.get(k);
+    if (registro) registro.saidasPrevistas += Number(p.valor) || 0;
+  });
+
+  let saldoInicialValor = 0;
+  if (empresaIdFiltro) {
+    const s = saldosIniciais.find(s => s.empresa_id === empresaIdFiltro);
+    if (s) saldoInicialValor = Number(s.valor) || 0;
+  } else {
+    saldoInicialValor = saldosIniciais.reduce((soma, s) => soma + (Number(s.valor) || 0), 0);
+  }
+
+  let acumulado = saldoInicialValor;
+  let menorSaldoFuturo = null, menorSaldoMes = null;
+
+  const linhas = meses.map(m => {
+    const k = chave(m.ano, m.mes);
+    const r = porMes.get(k);
+    const futuro = (m.ano * 12 + (m.mes - 1)) > mesAtualNum;
+    const saidasTotal = r.saidasRealizadas + r.saidasPrevistas;
+    const saldoDoMes = r.receitas - saidasTotal;
+    acumulado += saldoDoMes;
+
+    if (futuro && (menorSaldoFuturo === null || acumulado < menorSaldoFuturo)) {
+      menorSaldoFuturo = acumulado;
+      menorSaldoMes = mesLabel(m.ano, m.mes);
+    }
+
+    return { label: mesLabel(m.ano, m.mes), futuro, receitas: r.receitas, saidasRealizadas: r.saidasRealizadas, saidasPrevistas: r.saidasPrevistas, saldoDoMes, acumulado };
+  });
+
+  const saldoAtual = linhas.filter(l => !l.futuro).slice(-1)[0]?.acumulado ?? saldoInicialValor;
+
+  document.getElementById('metricasFluxo').innerHTML = `
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-wallet"></i></div><div><div class="mlabel">Saldo acumulado (mês atual)</div><div class="mval">${formatarMoeda(saldoAtual)}</div></div></div>
+    <div class="metric"><div class="micon ${menorSaldoFuturo !== null && menorSaldoFuturo < 0 ? 'bg-danger' : 'bg-warning'}"><i class="ti ti-alert-triangle"></i></div><div><div class="mlabel">Menor saldo projetado (próx. ${MESES_FUTURO} meses)</div><div class="mval">${menorSaldoFuturo !== null ? formatarMoeda(menorSaldoFuturo) : '—'}</div></div></div>
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-calendar"></i></div><div><div class="mlabel">Mês mais apertado</div><div class="mval" style="font-size:15px">${menorSaldoMes || '—'}</div></div></div>
+  `;
+
+  document.getElementById('tbodyFluxo').innerHTML = linhas.map(l => `
+    <tr>
+      <td style="text-transform:capitalize">${l.label}</td>
+      <td>${l.futuro ? '<span class="badge bg-info">Previsto</span>' : '<span class="badge bg-success">Realizado</span>'}</td>
+      <td style="text-align:right">${formatarMoeda(l.receitas)}</td>
+      <td style="text-align:right">${formatarMoeda(l.saidasRealizadas)}</td>
+      <td style="text-align:right">${l.saidasPrevistas > 0 ? formatarMoeda(l.saidasPrevistas) : '—'}</td>
+      <td style="text-align:right;color:${l.saldoDoMes >= 0 ? 'var(--success)' : 'var(--danger)'}">${formatarMoeda(l.saldoDoMes)}</td>
+      <td style="text-align:right;font-weight:500;color:${l.acumulado >= 0 ? 'var(--text)' : 'var(--danger)'}">${formatarMoeda(l.acumulado)}</td>
+    </tr>
+  `).join('');
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

@@ -9,6 +9,7 @@
 
 const MENU_ITEMS = [
   { page: 'painel',      label: 'Painel',        icon: 'ti-layout-dashboard' },
+  { page: 'fluxocaixa',  label: 'Fluxo de Caixa', icon: 'ti-chart-line' },
   { page: 'lancamentos', label: 'Lançamentos',   icon: 'ti-cash-banknote' },
   { page: 'limabank',    label: 'Lima Bank',     icon: 'ti-building-bank' },
   { page: 'contaspagar', label: 'Contas a pagar', icon: 'ti-file-invoice' },

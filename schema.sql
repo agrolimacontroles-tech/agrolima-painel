@@ -301,3 +301,14 @@ create table parametros_custo_diario (
 );
 
 alter table parametros_custo_diario disable row level security;
+
+-- ============================================================
+-- FLUXO DE CAIXA — saldo inicial por empresa (ponto de partida do acumulado)
+-- ============================================================
+create table saldo_inicial (
+  empresa_id int primary key references empresas(id),
+  valor numeric not null default 0,
+  data_referencia date not null default current_date
+);
+
+alter table saldo_inicial disable row level security;
