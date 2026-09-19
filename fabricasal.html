@@ -27,6 +27,7 @@ document.getElementById('mainContent').innerHTML = `
   <div class="subtoggle">
     <button class="stbtn active" id="btnTabFormulas" onclick="mostrarAba('formulas')">Fórmulas</button>
     <button class="stbtn" id="btnTabProducao" onclick="mostrarAba('producao')">Produção</button>
+    <button class="stbtn" id="btnTabConsumo" onclick="mostrarAba('consumo')">Consumo por Fazenda</button>
     <button class="stbtn" id="btnTabVendas" onclick="mostrarAba('vendas')">Vendas</button>
     <button class="stbtn" id="btnTabEstoque" onclick="mostrarAba('estoque')">Estoque de insumos</button>
   </div>
@@ -73,6 +74,30 @@ document.getElementById('mainContent').innerHTML = `
         <table>
           <thead><tr><th>Data</th><th>Produto</th><th style="text-align:right">Lote (kg)</th><th style="text-align:right">Custo</th><th></th></tr></thead>
           <tbody id="tbodyProducoes"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaConsumo" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Novo consumo de sal por fazenda</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Data</label><input type="date" id="qcData"></div>
+          <div class="fgroup"><label>Fazenda que consumiu</label><select id="qcEmpresa"></select></div>
+          <div class="fgroup"><label>Quantidade (kg)</label><input type="number" id="qcQuantidade" step="0.01"></div>
+          <div class="fgroup"><label>Valor</label><input type="number" id="qcValor" step="0.01"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="qcObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddConsumo"><i class="ti ti-check"></i> Registrar consumo</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Fazenda</th><th style="text-align:right">Quantidade (kg)</th><th style="text-align:right">Valor</th><th>Observação</th><th></th></tr></thead>
+          <tbody id="tbodyConsumo"><tr class="empty-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -138,13 +163,14 @@ document.getElementById('mainContent').innerHTML = `
 `;
 
 function mostrarAba(aba) {
-  ['formulas', 'producao', 'vendas', 'estoque'].forEach(a => {
+  ['formulas', 'producao', 'consumo', 'vendas', 'estoque'].forEach(a => {
     document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
     document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
   });
 }
 
 let EMPRESAS = [];
+let FABRICA_SAL_ID = null;
 
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
 
@@ -152,16 +178,23 @@ async function carregarBase() {
   await checkAuth();
   showUserEmail();
 
-  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome, tem_rebanho').order('nome');
   EMPRESAS = empresas || [];
-  document.getElementById('qvEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  FABRICA_SAL_ID = (EMPRESAS.find(e => /fábrica de sal/i.test(e.nome)) || {}).id;
+  const opcoesFazendas = EMPRESAS.filter(e => e.tem_rebanho).map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('qvEmpresa').innerHTML = opcoesFazendas;
+  document.getElementById('qcEmpresa').innerHTML = opcoesFazendas;
 
-  ['qpData', 'qvData', 'qeData'].forEach(id => document.getElementById(id).value = hojeISO());
+  ['qpData', 'qvData', 'qeData', 'qcData'].forEach(id => document.getElementById(id).value = hojeISO());
 
   carregarFormulas();
   carregarProducoes();
+  carregarConsumo();
   carregarVendas();
   carregarEstoque();
+
+  const abaUrl = new URLSearchParams(location.search).get('aba');
+  if (abaUrl) mostrarAba(abaUrl);
 }
 
 function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
@@ -219,6 +252,35 @@ async function carregarProducoes() {
     `).join('');
 }
 async function excluirProducao(id) { await supabaseClient.from('sal_producoes').delete().eq('id', id); carregarProducoes(); }
+
+// ---------- Consumo por fazenda ----------
+document.getElementById('btnAddConsumo').addEventListener('click', async () => {
+  const data = document.getElementById('qcData').value;
+  const empresa_consumidora_id = Number(document.getElementById('qcEmpresa').value);
+  const quantidade = parseFloat(document.getElementById('qcQuantidade').value);
+  const valor = parseFloat(document.getElementById('qcValor').value);
+  if (!data || !empresa_consumidora_id || isNaN(quantidade) || isNaN(valor)) return;
+  await supabaseClient.from('acertos_sal_pasto').insert({
+    data, tipo: 'sal', empresa_fornecedora_id: FABRICA_SAL_ID, empresa_consumidora_id, quantidade, valor,
+    observacao: document.getElementById('qcObservacao').value || null,
+  });
+  ['qcQuantidade', 'qcValor', 'qcObservacao'].forEach(id => document.getElementById(id).value = '');
+  carregarConsumo();
+});
+
+async function carregarConsumo() {
+  const data = await buscarPaginado(() => supabaseClient.from('acertos_sal_pasto').select('*').eq('tipo', 'sal').order('data', { ascending: false }));
+  document.getElementById('tbodyConsumo').innerHTML = data.length === 0
+    ? '<tr class="empty-row"><td colspan="6">Nenhum consumo registrado.</td></tr>'
+    : data.map(c => `
+      <tr>
+        <td>${new Date(c.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${nomeEmpresa(c.empresa_consumidora_id)}</td>
+        <td style="text-align:right">${c.quantidade}</td><td style="text-align:right">${formatarMoeda(c.valor)}</td><td>${c.observacao || '—'}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirConsumo(${c.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+async function excluirConsumo(id) { await supabaseClient.from('acertos_sal_pasto').delete().eq('id', id); carregarConsumo(); }
 
 // ---------- Vendas ----------
 document.getElementById('btnAddVenda').addEventListener('click', async () => {

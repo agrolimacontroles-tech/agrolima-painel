@@ -65,6 +65,11 @@ async function carregarBase() {
   document.getElementById('filtroEmpresa').innerHTML = `<option value="">Consolidado (todas as empresas)</option>` +
     EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
 
+  const empresaUrl = new URLSearchParams(location.search).get('empresa');
+  if (empresaUrl && EMPRESAS.some(e => String(e.id) === empresaUrl)) {
+    document.getElementById('filtroEmpresa').value = empresaUrl;
+  }
+
   document.getElementById('fSaldoData').value = hojeISO();
 
   await carregarSaldoInicial();

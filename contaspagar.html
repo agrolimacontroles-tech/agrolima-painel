@@ -105,6 +105,12 @@ async function carregarBase() {
   document.getElementById('fEmpresa').innerHTML = opcoes;
   document.getElementById('filtroEmpresa').innerHTML = `<option value="">Todas as empresas</option>` + opcoes;
 
+  const empresaUrl = new URLSearchParams(location.search).get('empresa');
+  if (empresaUrl && EMPRESAS.some(e => String(e.id) === empresaUrl)) {
+    document.getElementById('fEmpresa').value = empresaUrl;
+    document.getElementById('filtroEmpresa').value = empresaUrl;
+  }
+
   carregarLista();
 }
 

@@ -41,6 +41,8 @@ document.getElementById('mainContent').innerHTML = `
 // ============================================================
 // Dados do checklist (extraídos da planilha "ATIVIDADES ROTINA")
 // ============================================================
+// IDs das empresas no Agro Lima Painel: 1 Terras, 2 Top Boi, 3 Top Vacas,
+// 4 Confinamento, 5 Máquinas, 6 Fábrica de Sal, 7 Pontual, 8 Lima Bank
 const SECOES = [
   {
     id: 'diario',
@@ -48,15 +50,15 @@ const SECOES = [
     icone: 'ti-sun',
     tipoPeriodo: 'diario',
     itens: [
-      { id: 'd1', texto: 'Preencher lista de dias trabalhados', link: 'https://drive.google.com/drive/folders/11jGP1UpfREzPTnNuxfgnTEfFIsHDROue' },
-      { id: 'd2', texto: 'Lançar relatórios', link: 'https://drive.google.com/drive/folders/11jGP1UpfREzPTnNuxfgnTEfFIsHDROue' },
-      { id: 'd3', texto: 'Atualizar relação de gado de cada fazenda nos grupos' },
-      { id: 'd4', texto: 'Lançar horímetros', link: 'https://drive.google.com/drive/folders/1KSYTT5eJyZMAUD4HHlasbUiCb1yD_PfJ' },
-      { id: 'd5', texto: 'Lançar manejo nutricional', nota: '(se tiver)', link: 'https://drive.google.com/drive/folders/11jGP1UpfREzPTnNuxfgnTEfFIsHDROue' },
-      { id: 'd6', texto: 'Enviar consumo de sal do gado de cada fazenda no grupo Relação de Gado' },
-      { id: 'd7', texto: 'Dar baixa no estoque de sal', nota: '(se tiver)', link: 'https://drive.google.com/drive/folders/1vF7a0nOqn9KJ5rZex28TvFJ2QdsxGIf5' },
-      { id: 'd8', texto: 'Lançar produção de sal', nota: '(se tiver)', link: 'https://drive.google.com/drive/folders/1vF7a0nOqn9KJ5rZex28TvFJ2QdsxGIf5' },
-      { id: 'd9', texto: 'Atualizar estoque — saídas e/ou entradas no grupo da Fábrica de Sal' },
+      { id: 'd1', texto: 'Preencher lista de dias trabalhados', pendente: true },
+      { id: 'd2', texto: 'Lançar relatórios', pendente: true },
+      { id: 'd3', texto: 'Atualizar relação de gado de cada fazenda', link: 'https://topboi.vercel.app/animais.html' },
+      { id: 'd4', texto: 'Lançar horímetros', link: 'maquinas.html' },
+      { id: 'd5', texto: 'Lançar manejo nutricional', nota: '(se tiver)', pendente: true },
+      { id: 'd6', texto: 'Registrar consumo de sal por fazenda', link: 'fabricasal.html?aba=consumo' },
+      { id: 'd7', texto: 'Dar baixa no estoque de sal', nota: '(se tiver)', link: 'fabricasal.html?aba=estoque' },
+      { id: 'd8', texto: 'Lançar produção de sal', nota: '(se tiver)', link: 'fabricasal.html?aba=producao' },
+      { id: 'd9', texto: 'Conferir estoque de sal (entradas e saídas)', link: 'fabricasal.html?aba=estoque' },
       { id: 'd10', texto: 'Gravar áudio no grupo Relatórios' },
     ],
   },
@@ -66,18 +68,18 @@ const SECOES = [
     icone: 'ti-calendar-week',
     tipoPeriodo: 'semanal',
     itens: [
-      { id: 's1', texto: 'Criar lista de pagamentos semanais', nota: 'contém POP completo — PAG001. Depois mandar atualizada no grupo Controle de Pagamentos', link: 'https://drive.google.com/drive/folders/1-ng2Fgm4jRCQJBrTQD5sUuO7ZQvUUEMv' },
+      { id: 's1', texto: 'Criar lista de pagamentos semanais', link: 'contaspagar.html' },
       { id: 's2', texto: 'Enviar lista de pagamentos semanais no grupo Controle de Pagamentos' },
-      { id: 's3', texto: 'Conferir manutenção máquinas', nota: 'notificar Pedro se já estiver na época de renovar', link: 'https://drive.google.com/drive/folders/1KSYTT5eJyZMAUD4HHlasbUiCb1yD_PfJ' },
+      { id: 's3', texto: 'Conferir manutenção máquinas', nota: 'notificar Pedro se já estiver na época de renovar', link: 'maquinas.html' },
       { id: 's4', texto: 'Solicitar extratos bancários após pagamentos' },
-      { id: 's5a', texto: 'Preencher ControlPec — Top Boi', grupo: 'Preencher ControlPec de todas as contas com base nos extratos recebidos', link: 'https://docs.google.com/spreadsheets/d/1HWwRvQo8awttBTslQ8m_1-1iAGGZ8nVp0Y-uOTYFIi0/edit?usp=drive_link' },
-      { id: 's5b', texto: 'Preencher ControlPec — Terras', link: 'https://docs.google.com/spreadsheets/d/1A8ICgOHJmlkAv5y0iQl7pL2y1Yh3i8noLGMi3ee6AD0/edit?usp=drive_link' },
-      { id: 's5c', texto: 'Preencher ControlPec — Top Vacas', link: 'https://docs.google.com/spreadsheets/d/18UYKJkAakLPxmpVrG6gils63S8WiR4bPZ83RwwwpTBg/edit?usp=drive_link' },
-      { id: 's5d', texto: 'Preencher ControlPec — Fábrica de Sal', link: 'https://docs.google.com/spreadsheets/d/11Gl-aN38aMy0OSX4wLxMtCJKkn1Ptf_bV479YqNSHZs/edit?usp=drive_link' },
-      { id: 's5e', texto: 'Preencher ControlPec — Máquinas', link: 'https://docs.google.com/spreadsheets/d/1ejLHx9cAsCvTfumRVwnanjdu4LcVGCCJmN6lpi4i4rY/edit?usp=drive_link' },
-      { id: 's5f', texto: 'Preencher ControlPec — Confinamento', link: 'https://docs.google.com/spreadsheets/d/1ovZ4Zt74qNDzVIliM5sO3mBAziyER9Hh93kuq9ndLtU/edit?usp=drive_link' },
-      { id: 's5g', texto: 'Preencher ControlPec — Lima Bank', link: 'https://docs.google.com/spreadsheets/d/1t6W3VS-gtMGwlDzbUKi4i2uL0dqTTh8UdY2a0RWp5IQ/edit?usp=drive_link' },
-      { id: 's6', texto: 'Conferir se o saldo do ControlPec está idêntico ao saldo do banco' },
+      { id: 's5a', texto: 'Lançamentos — Top Boi', grupo: 'Lançar tudo no sistema com base nos extratos recebidos', link: 'lancamentos.html?empresa=2' },
+      { id: 's5b', texto: 'Lançamentos — Terras', link: 'lancamentos.html?empresa=1' },
+      { id: 's5c', texto: 'Lançamentos — Top Vacas', link: 'lancamentos.html?empresa=3' },
+      { id: 's5d', texto: 'Lançamentos — Fábrica de Sal', link: 'lancamentos.html?empresa=6' },
+      { id: 's5e', texto: 'Lançamentos — Máquinas', link: 'lancamentos.html?empresa=5' },
+      { id: 's5f', texto: 'Lançamentos — Confinamento', link: 'lancamentos.html?empresa=4' },
+      { id: 's5g', texto: 'Lima Bank', link: 'limabank.html' },
+      { id: 's6', texto: 'Conferir se o saldo do sistema está idêntico ao saldo do banco', link: 'fluxocaixa.html' },
     ],
   },
   {
@@ -86,10 +88,10 @@ const SECOES = [
     icone: 'ti-calendar-month',
     tipoPeriodo: 'mensal',
     itens: [
-      { id: 'm1', texto: 'Folha de funcionários', nota: '1º dia do mês — contém POP completo (PAG002)', link: 'https://docs.google.com/spreadsheets/d/1jtTEvx3VcGNcb9kk4CV0gBJp1O1cYfIp/edit?rtpof=true' },
-      { id: 'm2', texto: 'Lista de pagamento de funcionários', nota: '1º dia do mês — contém POP completo (PAG002)', link: 'https://docs.google.com/spreadsheets/d/1DYriZy0BD9IF0vyJ7Q_1FvsNwAq3Sl5t/edit?usp=drive_web&ouid=115518295194684463615&rtpof=true' },
+      { id: 'm1', texto: 'Folha de funcionários', nota: '1º dia do mês', pendente: true },
+      { id: 'm2', texto: 'Lista de pagamento de funcionários', nota: '1º dia do mês', link: 'contaspagar.html' },
       { id: 'm3', texto: 'Enviar ambas no grupo Controle de Pagamentos', nota: '1º dia do mês' },
-      { id: 'm4', texto: 'Organizar notas fiscais', nota: 'Último dia do mês — criar pasta do mês, enviar as NFs recebidas e mandar por e-mail pra contabilidade', link: 'https://drive.google.com/drive/folders/1JaDYSdIFbdRNawio7P44Zvcnea7BlVpk?usp=drive_link' },
+      { id: 'm4', texto: 'Organizar notas fiscais', nota: 'Último dia do mês', pendente: true },
     ],
   },
   {
@@ -100,7 +102,7 @@ const SECOES = [
     itens: [
       { id: 'c1', texto: 'Realizar cotações e solicitar aprovação de Pedro', nota: 'SEMPRE', grupo: 'Compras' },
       { id: 'c2', texto: 'Após aprovado, solicitar dados para pagamento' },
-      { id: 'c3', texto: 'Preencher a lista de pagamentos', nota: 'conta responsável, fornecedor, dados de pagamento, valor e descrição', link: 'https://docs.google.com/spreadsheets/d/19G0RajOdZtry_I__cq-ZbRwfKgN3Ju47C-3pdvtTUfo/edit?gid=327974533' },
+      { id: 'c3', texto: 'Preencher a lista de pagamentos', nota: 'conta responsável, fornecedor, dados de pagamento, valor e descrição', link: 'contaspagar.html' },
       { id: 'c4', texto: 'Enviar print das informações preenchidas pra Julia no grupo Controle de Pagamentos' },
       { id: 'c5', texto: 'Acessar o portal RI Digital', grupo: 'Solicitar certidão', link: 'https://ridigital.org.br/' },
       { id: 'c6', texto: 'Seguir o passo a passo do vídeo tutorial enviado no grupo' },
@@ -174,7 +176,8 @@ function renderSecoes() {
         <div class="checklist-item ${concluido ? 'done' : ''}">
           <input type="checkbox" class="checklist-check" ${concluido ? 'checked' : ''} onchange="alternarItem('${item.id}', '${periodoChave}', ${concluido})">
           <div class="checklist-texto">
-            ${item.link ? `<a href="${item.link}" target="_blank" rel="noopener">${item.texto} <i class="ti ti-external-link" style="font-size:12px"></i></a>` : item.texto}
+            ${item.link ? `<a href="${item.link}" target="_blank" rel="noopener">${item.texto} <i class="ti ti-arrow-right" style="font-size:12px"></i></a>` : item.texto}
+            ${item.pendente ? `<span class="badge bg-warning" style="margin-left:6px;font-size:10px">ainda não migrado</span>` : ''}
             ${item.nota ? `<div class="checklist-nota">${item.nota}</div>` : ''}
           </div>
         </div>
