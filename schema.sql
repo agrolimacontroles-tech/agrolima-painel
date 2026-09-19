@@ -312,3 +312,17 @@ create table saldo_inicial (
 );
 
 alter table saldo_inicial disable row level security;
+
+-- ============================================================
+-- CHECKLIST DA ROTINA — marcação de "feito" por item, reseta por período
+-- (diário = data, semanal = ano-semana ISO, mensal = ano-mês, sob demanda = fixo '')
+-- ============================================================
+create table checklist_execucoes (
+  id bigserial primary key,
+  item_id text not null,
+  periodo_chave text not null,
+  concluido_em timestamptz not null default now(),
+  unique (item_id, periodo_chave)
+);
+
+alter table checklist_execucoes disable row level security;
