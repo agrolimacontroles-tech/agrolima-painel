@@ -371,3 +371,14 @@ create table funcionario_ferias (
 );
 
 alter table funcionario_ferias disable row level security;
+
+create table funcionario_atividades (
+  id bigserial primary key,
+  funcionario_id int not null references funcionarios(id),
+  data date not null,
+  atividades_programadas text,
+  atividades_realizadas text,
+  unique (funcionario_id, data)
+);
+
+alter table funcionario_atividades disable row level security;

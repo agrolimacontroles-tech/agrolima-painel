@@ -38,6 +38,7 @@ document.getElementById('mainContent').innerHTML = `
   <div class="subtoggle">
     <button class="stbtn active" id="btnTabFuncionarios" onclick="mostrarAba('funcionarios')">Funcionários</button>
     <button class="stbtn" id="btnTabDias" onclick="mostrarAba('dias')">Dias Trabalhados</button>
+    <button class="stbtn" id="btnTabAtividades" onclick="mostrarAba('atividades')">Programação Semanal</button>
     <button class="stbtn" id="btnTabFerias" onclick="mostrarAba('ferias')">Férias</button>
   </div>
 
@@ -78,6 +79,18 @@ document.getElementById('mainContent').innerHTML = `
     </div>
   </div>
 
+  <div id="abaAtividades" style="display:none">
+    <div class="pagehead">
+      <div class="pagetitle" style="font-size:16px">Programado x realizado, por dia</div>
+      <input type="month" id="filtroMesAtividades">
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table class="grid-dias" id="tabelaGridAtividades"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
   <div id="abaFerias" style="display:none">
     <div class="card">
       <div class="cardh"><i class="ti ti-plus"></i> Nova férias</div>
@@ -107,7 +120,7 @@ document.getElementById('mainContent').innerHTML = `
 const STATUS_OPCOES = ['Trabalhou', 'Falta', 'Férias', 'Atestado', 'Licença', 'Folga', 'Folga Concedida', 'Feriado', 'Extra +', 'Extra Solicitada', 'Dia Incompleto', 'Expediente Normal'];
 
 function mostrarAba(aba) {
-  ['funcionarios', 'dias', 'ferias'].forEach(a => {
+  ['funcionarios', 'dias', 'atividades', 'ferias'].forEach(a => {
     document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
     document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
   });
@@ -128,9 +141,11 @@ async function carregarBase() {
   document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('fDataAdmissao').value = hojeISO();
   document.getElementById('filtroMesDias').value = mesAtualISO();
+  document.getElementById('filtroMesAtividades').value = mesAtualISO();
 
   await carregarFuncionarios();
   await carregarGridDias();
+  await carregarGridAtividades();
   await carregarFerias();
 
   const abaUrl = new URLSearchParams(location.search).get('aba');
@@ -281,6 +296,57 @@ async function editarObsDia(funcionarioId, data) {
     await supabaseClient.from('funcionario_dias_trabalhados').update({ observacao: nova }).eq('funcionario_id', funcionarioId).eq('data', data);
   }
   carregarGridDias();
+}
+
+// ---------- Programação semanal (atividades programadas x realizadas) ----------
+document.getElementById('filtroMesAtividades').addEventListener('change', carregarGridAtividades);
+
+async function carregarGridAtividades() {
+  const mes = document.getElementById('filtroMesAtividades').value;
+  const [ano, mesNum] = mes.split('-').map(Number);
+  const ultimoDia = new Date(ano, mesNum, 0).getDate();
+
+  const ativos = FUNCIONARIOS.filter(f => f.status !== 'demitido');
+
+  const registros = await buscarPaginado(() => supabaseClient.from('funcionario_atividades').select('*').gte('data', `${mes}-01`).lte('data', `${mes}-${String(ultimoDia).padStart(2, '0')}`));
+  const mapa = new Map(registros.map(r => [`${r.funcionario_id}_${r.data}`, r]));
+  window._mapaAtividades = mapa;
+
+  const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+  let html = '<thead><tr><th rowspan="2">Data</th>' + ativos.map(f => `<th colspan="2">${f.nome}</th>`).join('') + '</tr><tr>' +
+    ativos.map(() => '<th>Programada</th><th>Realizada</th>').join('') + '</tr></thead><tbody>';
+
+  for (let dia = 1; dia <= ultimoDia; dia++) {
+    const dataISO = `${mes}-${String(dia).padStart(2, '0')}`;
+    const diaSemanaIdx = new Date(ano, mesNum - 1, dia).getDay();
+    const fimDeSemana = diaSemanaIdx === 0 || diaSemanaIdx === 6;
+    html += `<tr class="${fimDeSemana ? 'dia-fimdesemana' : ''}"><td>${String(dia).padStart(2, '0')} ${diasSemana[diaSemanaIdx]}</td>`;
+    ativos.forEach(f => {
+      const registro = mapa.get(`${f.id}_${dataISO}`);
+      const prog = registro ? (registro.atividades_programadas || '') : '';
+      const real = registro ? (registro.atividades_realizadas || '') : '';
+      html += `<td><input type="text" style="width:140px" value="${prog.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${f.id}, '${dataISO}', 'atividades_programadas', this.value)"></td>`;
+      html += `<td><input type="text" style="width:220px" value="${real.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${f.id}, '${dataISO}', 'atividades_realizadas', this.value)"></td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  document.getElementById('tabelaGridAtividades').innerHTML = html;
+}
+
+async function salvarAtividade(funcionarioId, data, campo, valor) {
+  const registro = window._mapaAtividades.get(`${funcionarioId}_${data}`);
+  if (!registro && !valor) return;
+  const payload = {
+    funcionario_id: funcionarioId,
+    data,
+    atividades_programadas: registro ? registro.atividades_programadas : null,
+    atividades_realizadas: registro ? registro.atividades_realizadas : null,
+  };
+  payload[campo] = valor || null;
+  await supabaseClient.from('funcionario_atividades').upsert(payload, { onConflict: 'funcionario_id,data' });
+  window._mapaAtividades.set(`${funcionarioId}_${data}`, payload);
 }
 
 // ---------- Férias ----------
