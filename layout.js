@@ -12,6 +12,7 @@ const MENU_ITEMS = [
   { page: 'rotina',      label: 'Rotina',        icon: 'ti-checklist' },
   { page: 'fluxocaixa',  label: 'Fluxo de Caixa', icon: 'ti-chart-line' },
   { page: 'lancamentos', label: 'Lançamentos',   icon: 'ti-cash-banknote' },
+  { page: 'funcionarios', label: 'Funcionários', icon: 'ti-users' },
   { page: 'limabank',    label: 'Lima Bank',     icon: 'ti-building-bank' },
   { page: 'contaspagar', label: 'Contas a pagar', icon: 'ti-file-invoice' },
   { page: 'dividas',     label: 'Dívidas',       icon: 'ti-percentage' },

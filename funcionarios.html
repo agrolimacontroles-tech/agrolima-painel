@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Funcionários</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.grid-dias { font-size: 12px; }
+.grid-dias th, .grid-dias td { padding: 4px 6px; white-space: nowrap; }
+.grid-dias select { font-size: 11px; padding: 2px 4px; border-radius: 5px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); }
+.status-Trabalhou, .status-ExpedienteNormal { color: var(--success); }
+.status-Falta, .status-DiaIncompleto { color: var(--danger); }
+.status-Férias, .status-Licença, .status-Atestado { color: var(--warning); }
+.dia-fimdesemana { background: var(--track-bg); }
+.obs-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 0 2px; }
+.obs-btn.tem-obs { color: var(--info); }
+</style>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('funcionarios');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Funcionários</div>
+      <div class="pagesub">Cadastro, dias trabalhados e férias</div>
+    </div>
+  </div>
+
+  <div class="subtoggle">
+    <button class="stbtn active" id="btnTabFuncionarios" onclick="mostrarAba('funcionarios')">Funcionários</button>
+    <button class="stbtn" id="btnTabDias" onclick="mostrarAba('dias')">Dias Trabalhados</button>
+    <button class="stbtn" id="btnTabFerias" onclick="mostrarAba('ferias')">Férias</button>
+  </div>
+
+  <div id="abaFuncionarios">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-user-plus"></i> Novo funcionário</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Nome</label><input type="text" id="fNome"></div>
+          <div class="fgroup"><label>Cargo</label><input type="text" id="fCargo"></div>
+          <div class="fgroup"><label>Empresa / Fazenda</label><select id="fEmpresa"></select></div>
+          <div class="fgroup"><label>Data de admissão</label><input type="date" id="fDataAdmissao"></div>
+          <div class="fgroup"><label>Salário</label><input type="number" id="fSalario" step="0.01"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddFuncionario"><i class="ti ti-check"></i> Cadastrar</button>
+        <span id="msgFuncionario" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Nome</th><th>Cargo</th><th>Empresa</th><th>Admissão</th><th>Status</th><th></th></tr></thead>
+          <tbody id="tbodyFuncionarios"><tr class="empty-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaDias" style="display:none">
+    <div class="pagehead">
+      <div class="pagetitle" style="font-size:16px">Grade do mês</div>
+      <input type="month" id="filtroMesDias">
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table class="grid-dias" id="tabelaGridDias"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaFerias" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Nova férias</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Funcionário</label><select id="fvFuncionario"></select></div>
+          <div class="fgroup"><label>Período aquisitivo — início</label><input type="date" id="fvPeriodoInicio"></div>
+          <div class="fgroup"><label>Período aquisitivo — fim</label><input type="date" id="fvPeriodoFim"></div>
+          <div class="fgroup"><label>Início do gozo</label><input type="date" id="fvGozoInicio"></div>
+          <div class="fgroup"><label>Fim do gozo</label><input type="date" id="fvGozoFim"></div>
+          <div class="fgroup"><label>Dias</label><input type="number" id="fvDias" step="1" value="30"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddFerias"><i class="ti ti-check"></i> Registrar férias</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Funcionário</th><th>Período aquisitivo</th><th>Gozo</th><th style="text-align:right">Dias</th><th>Status</th><th></th></tr></thead>
+          <tbody id="tbodyFerias"><tr class="empty-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+`;
+
+const STATUS_OPCOES = ['Trabalhou', 'Falta', 'Férias', 'Atestado', 'Licença', 'Folga', 'Folga Concedida', 'Feriado', 'Extra +', 'Extra Solicitada', 'Dia Incompleto', 'Expediente Normal'];
+
+function mostrarAba(aba) {
+  ['funcionarios', 'dias', 'ferias'].forEach(a => {
+    document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
+    document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
+  });
+}
+
+let EMPRESAS = [];
+let FUNCIONARIOS = [];
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+function mesAtualISO() { return new Date().toISOString().slice(0, 7); }
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  EMPRESAS = empresas || [];
+  document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('fDataAdmissao').value = hojeISO();
+  document.getElementById('filtroMesDias').value = mesAtualISO();
+
+  await carregarFuncionarios();
+  await carregarGridDias();
+  await carregarFerias();
+
+  const abaUrl = new URLSearchParams(location.search).get('aba');
+  if (abaUrl) mostrarAba(abaUrl);
+}
+
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+
+// ---------- Funcionários ----------
+document.getElementById('btnAddFuncionario').addEventListener('click', async () => {
+  const nome = document.getElementById('fNome').value.trim();
+  const data_admissao = document.getElementById('fDataAdmissao').value;
+  const msg = document.getElementById('msgFuncionario');
+  if (!nome || !data_admissao) {
+    msg.textContent = 'Preencha nome e data de admissão.';
+    msg.className = 'msg show error';
+    return;
+  }
+  const { error } = await supabaseClient.from('funcionarios').insert({
+    nome,
+    cargo: document.getElementById('fCargo').value || null,
+    empresa_id: Number(document.getElementById('fEmpresa').value) || null,
+    data_admissao,
+    salario: parseFloat(document.getElementById('fSalario').value) || null,
+  });
+  if (error) {
+    msg.textContent = 'Erro: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+  msg.textContent = 'Funcionário cadastrado!';
+  msg.className = 'msg show success';
+  ['fNome', 'fCargo', 'fSalario'].forEach(id => document.getElementById(id).value = '');
+  await carregarFuncionarios();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+function badgeStatusFuncionario(status) {
+  const map = { ativo: 'bg-success', ferias: 'bg-info', afastado: 'bg-warning', demitido: 'bg-danger' };
+  return `<span class="badge ${map[status] || 'bg-info'}">${status}</span>`;
+}
+
+async function carregarFuncionarios() {
+  const { data } = await supabaseClient.from('funcionarios').select('*').order('nome');
+  FUNCIONARIOS = data || [];
+  renderSelectFuncionariosFerias();
+
+  document.getElementById('tbodyFuncionarios').innerHTML = FUNCIONARIOS.length === 0
+    ? '<tr class="empty-row"><td colspan="6">Nenhum funcionário cadastrado.</td></tr>'
+    : FUNCIONARIOS.map(f => `
+      <tr>
+        <td>${f.nome}</td>
+        <td>${f.cargo || '—'}</td>
+        <td>${nomeEmpresa(f.empresa_id)}</td>
+        <td>${new Date(f.data_admissao + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td>${badgeStatusFuncionario(f.status)}</td>
+        <td style="white-space:nowrap">
+          ${f.status !== 'demitido'
+            ? `<button class="btn btn-danger" style="padding:4px 10px" onclick="demitirFuncionario(${f.id})"><i class="ti ti-user-x"></i> Demitir</button>`
+            : `<button class="btn btn-success" style="padding:4px 10px" onclick="reativarFuncionario(${f.id})"><i class="ti ti-user-check"></i> Reativar</button>`}
+          <button class="btn btn-secondary" style="padding:4px 10px" onclick="excluirFuncionario(${f.id})"><i class="ti ti-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+}
+
+async function demitirFuncionario(id) {
+  const motivo = prompt('Motivo da demissão (opcional):') || null;
+  const data_demissao = hojeISO();
+  await supabaseClient.from('funcionarios').update({ status: 'demitido', data_demissao, motivo_demissao: motivo }).eq('id', id);
+  carregarFuncionarios();
+}
+
+async function reativarFuncionario(id) {
+  await supabaseClient.from('funcionarios').update({ status: 'ativo', data_demissao: null, motivo_demissao: null }).eq('id', id);
+  carregarFuncionarios();
+}
+
+async function excluirFuncionario(id) {
+  if (!confirm('Excluir esse funcionário e todo o histórico dele?')) return;
+  await supabaseClient.from('funcionario_dias_trabalhados').delete().eq('funcionario_id', id);
+  await supabaseClient.from('funcionario_ferias').delete().eq('funcionario_id', id);
+  await supabaseClient.from('funcionarios').delete().eq('id', id);
+  carregarFuncionarios();
+  carregarGridDias();
+  carregarFerias();
+}
+
+// ---------- Dias trabalhados (grade do mês) ----------
+document.getElementById('filtroMesDias').addEventListener('change', carregarGridDias);
+
+async function carregarGridDias() {
+  const mes = document.getElementById('filtroMesDias').value;
+  const [ano, mesNum] = mes.split('-').map(Number);
+  const ultimoDia = new Date(ano, mesNum, 0).getDate();
+
+  const ativos = FUNCIONARIOS.filter(f => f.status !== 'demitido');
+
+  const registros = await buscarPaginado(() => supabaseClient.from('funcionario_dias_trabalhados').select('*').gte('data', `${mes}-01`).lte('data', `${mes}-${String(ultimoDia).padStart(2, '0')}`));
+  const mapaRegistros = new Map(registros.map(r => [`${r.funcionario_id}_${r.data}`, r]));
+
+  const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+  let html = '<thead><tr><th>Data</th>' + ativos.map(f => `<th>${f.nome}</th>`).join('') + '</tr></thead><tbody>';
+  for (let dia = 1; dia <= ultimoDia; dia++) {
+    const dataISO = `${mes}-${String(dia).padStart(2, '0')}`;
+    const diaSemanaIdx = new Date(ano, mesNum - 1, dia).getDay();
+    const fimDeSemana = diaSemanaIdx === 0 || diaSemanaIdx === 6;
+    html += `<tr class="${fimDeSemana ? 'dia-fimdesemana' : ''}"><td>${String(dia).padStart(2, '0')} ${diasSemana[diaSemanaIdx]}</td>`;
+    ativos.forEach(f => {
+      const chave = `${f.id}_${dataISO}`;
+      const registro = mapaRegistros.get(chave);
+      const status = registro ? registro.status : '';
+      const temObs = registro && registro.observacao;
+      html += `<td>
+        <select class="status-${status.replace(/[^a-zA-ZÀ-ú]/g, '')}" onchange="salvarDiaTrabalhado(${f.id}, '${dataISO}', this.value)">
+          <option value="">—</option>
+          ${STATUS_OPCOES.map(s => `<option value="${s}" ${status === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+        <button class="obs-btn ${temObs ? 'tem-obs' : ''}" title="Observação" onclick="editarObsDia(${f.id}, '${dataISO}')"><i class="ti ti-message-2"></i></button>
+      </td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  document.getElementById('tabelaGridDias').innerHTML = html;
+
+  window._mapaRegistrosDias = mapaRegistros;
+}
+
+async function salvarDiaTrabalhado(funcionarioId, data, status) {
+  if (!status) {
+    await supabaseClient.from('funcionario_dias_trabalhados').delete().eq('funcionario_id', funcionarioId).eq('data', data);
+  } else {
+    await supabaseClient.from('funcionario_dias_trabalhados').upsert({ funcionario_id: funcionarioId, data, status }, { onConflict: 'funcionario_id,data' });
+  }
+  carregarGridDias();
+}
+
+async function editarObsDia(funcionarioId, data) {
+  const registro = window._mapaRegistrosDias.get(`${funcionarioId}_${data}`);
+  const atual = registro ? registro.observacao || '' : '';
+  const nova = prompt('Observação:', atual);
+  if (nova === null) return;
+  if (!registro) {
+    await supabaseClient.from('funcionario_dias_trabalhados').upsert({ funcionario_id: funcionarioId, data, status: 'Trabalhou', observacao: nova }, { onConflict: 'funcionario_id,data' });
+  } else {
+    await supabaseClient.from('funcionario_dias_trabalhados').update({ observacao: nova }).eq('funcionario_id', funcionarioId).eq('data', data);
+  }
+  carregarGridDias();
+}
+
+// ---------- Férias ----------
+document.getElementById('btnAddFerias').addEventListener('click', async () => {
+  const funcionario_id = Number(document.getElementById('fvFuncionario').value);
+  const periodo_aquisitivo_inicio = document.getElementById('fvPeriodoInicio').value;
+  const periodo_aquisitivo_fim = document.getElementById('fvPeriodoFim').value;
+  if (!funcionario_id || !periodo_aquisitivo_inicio || !periodo_aquisitivo_fim) return;
+
+  const gozoInicio = document.getElementById('fvGozoInicio').value || null;
+  await supabaseClient.from('funcionario_ferias').insert({
+    funcionario_id, periodo_aquisitivo_inicio, periodo_aquisitivo_fim,
+    data_inicio_gozo: gozoInicio,
+    data_fim_gozo: document.getElementById('fvGozoFim').value || null,
+    dias: parseInt(document.getElementById('fvDias').value) || null,
+    status: gozoInicio ? 'agendada' : 'pendente',
+  });
+  carregarFerias();
+});
+
+function renderSelectFuncionariosFerias() {
+  document.getElementById('fvFuncionario').innerHTML = FUNCIONARIOS.filter(f => f.status !== 'demitido').map(f => `<option value="${f.id}">${f.nome}</option>`).join('');
+}
+
+function nomeFuncionario(id) { return (FUNCIONARIOS.find(f => f.id === id) || {}).nome || '—'; }
+
+async function carregarFerias() {
+  renderSelectFuncionariosFerias();
+  const { data } = await supabaseClient.from('funcionario_ferias').select('*').order('periodo_aquisitivo_inicio', { ascending: false });
+
+  document.getElementById('tbodyFerias').innerHTML = (data || []).length === 0
+    ? '<tr class="empty-row"><td colspan="6">Nenhuma férias registrada.</td></tr>'
+    : data.map(f => `
+      <tr>
+        <td>${nomeFuncionario(f.funcionario_id)}</td>
+        <td>${new Date(f.periodo_aquisitivo_inicio + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(f.periodo_aquisitivo_fim + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td>${f.data_inicio_gozo ? new Date(f.data_inicio_gozo + 'T00:00:00').toLocaleDateString('pt-BR') + ' a ' + (f.data_fim_gozo ? new Date(f.data_fim_gozo + 'T00:00:00').toLocaleDateString('pt-BR') : '—') : '—'}</td>
+        <td style="text-align:right">${f.dias ?? '—'}</td>
+        <td><span class="badge ${f.status === 'gozada' ? 'bg-success' : f.status === 'agendada' ? 'bg-info' : 'bg-warning'}">${f.status}</span></td>
+        <td style="white-space:nowrap">
+          ${f.status !== 'gozada' ? `<button class="btn btn-success" style="padding:4px 10px" onclick="marcarFeriasGozada(${f.id})"><i class="ti ti-check"></i></button>` : ''}
+          <button class="btn btn-danger" style="padding:4px 10px" onclick="excluirFerias(${f.id})"><i class="ti ti-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+}
+
+async function marcarFeriasGozada(id) {
+  await supabaseClient.from('funcionario_ferias').update({ status: 'gozada' }).eq('id', id);
+  carregarFerias();
+}
+
+async function excluirFerias(id) {
+  await supabaseClient.from('funcionario_ferias').delete().eq('id', id);
+  carregarFerias();
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

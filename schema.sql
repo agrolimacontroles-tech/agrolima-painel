@@ -326,3 +326,48 @@ create table checklist_execucoes (
 );
 
 alter table checklist_execucoes disable row level security;
+
+-- ============================================================
+-- FUNCIONÁRIOS — cadastro, dias trabalhados, férias
+-- ============================================================
+create table funcionarios (
+  id serial primary key,
+  nome text not null,
+  cargo text,
+  empresa_id int references empresas(id),
+  data_admissao date not null,
+  salario numeric,
+  status text not null default 'ativo',   -- 'ativo' | 'ferias' | 'afastado' | 'demitido'
+  data_demissao date,
+  motivo_demissao text,
+  observacao text
+);
+
+alter table funcionarios disable row level security;
+
+create table funcionario_dias_trabalhados (
+  id bigserial primary key,
+  funcionario_id int not null references funcionarios(id),
+  data date not null,
+  status text not null default 'Trabalhou',  -- Trabalhou | Falta | Férias | Atestado | Licença | Folga |
+                                              -- Folga Concedida | Feriado | Extra + | Extra Solicitada |
+                                              -- Dia Incompleto | Expediente Normal
+  observacao text,
+  unique (funcionario_id, data)
+);
+
+alter table funcionario_dias_trabalhados disable row level security;
+
+create table funcionario_ferias (
+  id bigserial primary key,
+  funcionario_id int not null references funcionarios(id),
+  periodo_aquisitivo_inicio date not null,
+  periodo_aquisitivo_fim date not null,
+  data_inicio_gozo date,
+  data_fim_gozo date,
+  dias int,
+  status text not null default 'pendente',  -- 'pendente' | 'agendada' | 'gozada'
+  observacao text
+);
+
+alter table funcionario_ferias disable row level security;
