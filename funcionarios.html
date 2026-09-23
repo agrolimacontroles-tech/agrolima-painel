@@ -27,6 +27,16 @@
 .dia-item select { font-size: 12px; padding: 4px 6px; border-radius: 5px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); font-weight: 500; }
 .dia-item input[type="text"] { font-size: 12px; padding: 5px 8px; border-radius: 5px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); }
 
+.tabela-excel { border-collapse: collapse; font-size: 12px; width: 100%; }
+.tabela-excel th, .tabela-excel td { border: 1px solid var(--border); padding: 2px 4px; text-align: left; }
+.tabela-excel thead th { background: #073763; color: #fff; text-align: center; white-space: nowrap; position: sticky; top: 0; }
+.tabela-excel td:first-child { text-align: center; white-space: nowrap; font-weight: 600; width: 62px; }
+.tabela-excel input[type="text"] { width: 100%; border: none; background: transparent; color: var(--text); font-size: 12px; padding: 3px 4px; box-sizing: border-box; }
+.tabela-excel input[type="text"]:focus { outline: 1px solid var(--accent-bg); background: var(--bg-panel); }
+.tabela-excel tr.dia-sabado td { background: var(--track-bg); }
+.tabela-excel tr.dia-domingo td { background: var(--danger-bg); }
+.tabela-excel tr.dia-domingo td:first-child { color: var(--danger); }
+
 .atividade-linha { display: flex; align-items: flex-start; gap: 14px; padding: 12px 10px; border-bottom: 0.5px solid var(--border); }
 .atividade-linha:last-child { border-bottom: none; }
 .atividade-linha.dia-domingo { background: var(--danger-bg); border-radius: 8px; margin: 2px 0; }
@@ -136,7 +146,9 @@ document.getElementById('mainContent').innerHTML = `
     <div id="blocoGradeMesAtividades" style="display:none">
       <div class="card">
         <div class="cardh"><i class="ti ti-calendar"></i> Mês inteiro — <span id="nomeFuncionarioSelecionadoMes"></span></div>
-        <div class="cardb" id="listaGridAtividades"><span class="spinner"></span></div>
+        <div class="cardb table-wrap">
+          <table class="tabela-excel" id="tabelaGridAtividades"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+        </div>
       </div>
     </div>
   </div>
@@ -532,6 +544,19 @@ function linhaAtividadeHtml(dia, dataISO, ano, mesNum, funcionarioId, mapa) {
     </div>`;
 }
 
+function linhaAtividadeExcelHtml(dia, dataISO, ano, mesNum, funcionarioId, mapa) {
+  const diaSemanaIdx = new Date(ano, mesNum - 1, dia).getDay();
+  const classeDia = diaSemanaIdx === 0 ? 'dia-domingo' : diaSemanaIdx === 6 ? 'dia-sabado' : '';
+  const registro = mapa.get(`${funcionarioId}_${dataISO}`);
+  const prog = registro ? (registro.atividades_programadas || '') : '';
+  const real = registro ? (registro.atividades_realizadas || '') : '';
+  return `<tr class="${classeDia}">
+    <td>${String(dia).padStart(2, '0')} ${DIAS_SEMANA_ABREV[diaSemanaIdx]}</td>
+    <td><input type="text" value="${prog.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${funcionarioId}, '${dataISO}', 'atividades_programadas', this.value)"></td>
+    <td><input type="text" value="${real.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${funcionarioId}, '${dataISO}', 'atividades_realizadas', this.value)"></td>
+  </tr>`;
+}
+
 async function carregarSemanaAtividades() {
   renderBlocosFuncionariosAtividades();
   if (!funcionarioSelecionadoAtividades) {
@@ -574,7 +599,7 @@ async function alternarGradeMesAtividades() {
 
 async function carregarGridAtividades() {
   if (!funcionarioSelecionadoAtividades) {
-    document.getElementById('listaGridAtividades').innerHTML = '<p style="color:var(--text-dim);font-size:13px">Cadastre um funcionário primeiro.</p>';
+    document.getElementById('tabelaGridAtividades').innerHTML = '<tbody><tr class="empty-row"><td>Cadastre um funcionário primeiro.</td></tr></tbody>';
     return;
   }
 
@@ -586,12 +611,13 @@ async function carregarGridAtividades() {
   const mapa = new Map(registros.map(r => [`${r.funcionario_id}_${r.data}`, r]));
   window._mapaAtividades = mapa;
 
-  let html = '';
+  let html = '<thead><tr><th>Data</th><th>Programada</th><th>Realizada</th></tr></thead><tbody>';
   for (let dia = 1; dia <= ultimoDia; dia++) {
     const dataISO = `${mes}-${String(dia).padStart(2, '0')}`;
-    html += linhaAtividadeHtml(dia, dataISO, ano, mesNum, funcionarioSelecionadoAtividades, mapa);
+    html += linhaAtividadeExcelHtml(dia, dataISO, ano, mesNum, funcionarioSelecionadoAtividades, mapa);
   }
-  document.getElementById('listaGridAtividades').innerHTML = html;
+  html += '</tbody>';
+  document.getElementById('tabelaGridAtividades').innerHTML = html;
 }
 
 async function salvarAtividade(funcionarioId, data, campo, valor) {
