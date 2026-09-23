@@ -45,9 +45,16 @@
 .atividade-linha.dia-domingo .atividade-dia-label { color: var(--danger); }
 .atividade-campos { flex: 1; display: flex; gap: 14px; flex-wrap: wrap; }
 .atividade-campo { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 5px; }
-.atividade-campo label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+.atividade-campo label { font-size: 10px; color: #fff; text-transform: uppercase; letter-spacing: .4px; font-weight: 600; }
 .atividade-campo input { width: 100%; padding: 9px 11px; font-size: 13px; border-radius: 7px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); box-sizing: border-box; }
 .atividade-campo input:focus { outline: none; border-color: var(--accent-bg); }
+
+.data-grande { font-size: 24px; font-weight: 600; color: var(--text); margin: 10px 0 14px; text-transform: capitalize; }
+
+@keyframes piscar-hoje { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.hoje-marcador { display: inline-block; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 8px; text-transform: uppercase; letter-spacing: .4px; animation: piscar-hoje 1.2s ease-in-out infinite; }
+.atividade-linha.dia-hoje { outline: 2px solid var(--danger); outline-offset: -2px; }
+.tabela-excel tr.dia-hoje td:first-child { position: relative; }
 </style>
 </head>
 <body>
@@ -102,6 +109,7 @@ document.getElementById('mainContent').innerHTML = `
       <div class="pagetitle" style="font-size:16px">Lançamento do dia</div>
       <input type="date" id="filtroDiaDias">
     </div>
+    <div class="data-grande" id="dataGrandeSelecionada"></div>
     <div class="card">
       <div class="cardb">
         <div class="legenda-status" id="legendaStatus"></div>
@@ -325,8 +333,16 @@ async function excluirFuncionario(id) {
 // ---------- Dias trabalhados — lançamento rápido do dia ----------
 document.getElementById('filtroDiaDias').addEventListener('change', carregarListaDia);
 
+function formatarDataGrande(dataISO) {
+  const d = new Date(dataISO + 'T00:00:00');
+  let texto = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  if (dataISO === hojeISO()) texto += ' <span class="hoje-marcador">Hoje</span>';
+  return texto;
+}
+
 async function carregarListaDia() {
   const data = document.getElementById('filtroDiaDias').value;
+  document.getElementById('dataGrandeSelecionada').innerHTML = formatarDataGrande(data);
   const ativos = FUNCIONARIOS.filter(f => f.status !== 'demitido');
 
   const { data: registros } = await supabaseClient.from('funcionario_dias_trabalhados').select('*').eq('data', data);
@@ -524,13 +540,14 @@ function selecionarFuncionarioAtividades(id) {
 
 function linhaAtividadeHtml(dia, dataISO, ano, mesNum, funcionarioId, mapa) {
   const diaSemanaIdx = new Date(ano, mesNum - 1, dia).getDay();
-  const classeDia = diaSemanaIdx === 0 ? 'dia-domingo' : diaSemanaIdx === 6 ? 'dia-sabado' : '';
+  const eHoje = dataISO === hojeISO();
+  const classeDia = (diaSemanaIdx === 0 ? 'dia-domingo' : diaSemanaIdx === 6 ? 'dia-sabado' : '') + (eHoje ? ' dia-hoje' : '');
   const registro = mapa.get(`${funcionarioId}_${dataISO}`);
   const prog = registro ? (registro.atividades_programadas || '') : '';
   const real = registro ? (registro.atividades_realizadas || '') : '';
   return `
     <div class="atividade-linha ${classeDia}">
-      <div class="atividade-dia-label">${String(dia).padStart(2, '0')}<br>${DIAS_SEMANA_ABREV[diaSemanaIdx]}</div>
+      <div class="atividade-dia-label">${String(dia).padStart(2, '0')}<br>${DIAS_SEMANA_ABREV[diaSemanaIdx]}${eHoje ? '<br><span class="hoje-marcador">Hoje</span>' : ''}</div>
       <div class="atividade-campos">
         <div class="atividade-campo">
           <label>Programada</label>
@@ -546,12 +563,13 @@ function linhaAtividadeHtml(dia, dataISO, ano, mesNum, funcionarioId, mapa) {
 
 function linhaAtividadeExcelHtml(dia, dataISO, ano, mesNum, funcionarioId, mapa) {
   const diaSemanaIdx = new Date(ano, mesNum - 1, dia).getDay();
-  const classeDia = diaSemanaIdx === 0 ? 'dia-domingo' : diaSemanaIdx === 6 ? 'dia-sabado' : '';
+  const eHoje = dataISO === hojeISO();
+  const classeDia = (diaSemanaIdx === 0 ? 'dia-domingo' : diaSemanaIdx === 6 ? 'dia-sabado' : '') + (eHoje ? ' dia-hoje' : '');
   const registro = mapa.get(`${funcionarioId}_${dataISO}`);
   const prog = registro ? (registro.atividades_programadas || '') : '';
   const real = registro ? (registro.atividades_realizadas || '') : '';
   return `<tr class="${classeDia}">
-    <td>${String(dia).padStart(2, '0')} ${DIAS_SEMANA_ABREV[diaSemanaIdx]}</td>
+    <td>${String(dia).padStart(2, '0')} ${DIAS_SEMANA_ABREV[diaSemanaIdx]}${eHoje ? ' <span class="hoje-marcador">Hoje</span>' : ''}</td>
     <td><input type="text" value="${prog.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${funcionarioId}, '${dataISO}', 'atividades_programadas', this.value)"></td>
     <td><input type="text" value="${real.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${funcionarioId}, '${dataISO}', 'atividades_realizadas', this.value)"></td>
   </tr>`;
