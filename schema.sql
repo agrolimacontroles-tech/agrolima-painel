@@ -191,6 +191,26 @@ create table acertos_sal_pasto (
 alter table acertos_sal_pasto disable row level security;
 
 -- ============================================================
+-- CONSUMO DE SAL POR MANGA — controle zootécnico (não financeiro), replica a planilha
+-- "CONSUMO DE SAL - <FAZENDA>" (uma por fazenda: Cipó, Carrapato/Esp.Santo, Gameleira/
+-- Buriti, Canaã). Intervalo entre reposições e consumo por cabeça/dia são calculados na
+-- tela a partir do histórico, não armazenados.
+-- ============================================================
+create table sal_consumo_manga (
+  id bigserial primary key,
+  empresa_id int not null references empresas(id),
+  manga text not null,
+  data date not null,
+  produto text,
+  quantidade_lote numeric,           -- cabeças de gado naquela manga
+  quantidade_fornecida_kg numeric not null,
+  residuo_cocho_kg numeric default 0,
+  observacao text
+);
+
+alter table sal_consumo_manga disable row level security;
+
+-- ============================================================
 -- FRETES (viagens) — um cadastro só, minuta é só a versão impressa dele
 -- ============================================================
 create table viagens (

@@ -27,7 +27,8 @@ document.getElementById('mainContent').innerHTML = `
   <div class="subtoggle">
     <button class="stbtn active" id="btnTabFormulas" onclick="mostrarAba('formulas')">Fórmulas</button>
     <button class="stbtn" id="btnTabProducao" onclick="mostrarAba('producao')">Produção</button>
-    <button class="stbtn" id="btnTabConsumo" onclick="mostrarAba('consumo')">Consumo por Fazenda</button>
+    <button class="stbtn" id="btnTabConsumo" onclick="mostrarAba('consumo')">Consumo por Fazenda (R$)</button>
+    <button class="stbtn" id="btnTabManga" onclick="mostrarAba('manga')">Consumo por Manga</button>
     <button class="stbtn" id="btnTabVendas" onclick="mostrarAba('vendas')">Vendas</button>
     <button class="stbtn" id="btnTabEstoque" onclick="mostrarAba('estoque')">Estoque de insumos</button>
   </div>
@@ -103,6 +104,38 @@ document.getElementById('mainContent').innerHTML = `
     </div>
   </div>
 
+  <div id="abaManga" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Novo registro de cocho</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Fazenda</label><select id="qmgEmpresa"></select></div>
+          <div class="fgroup"><label>Manga / Curral</label><input type="text" id="qmgManga" placeholder="Ex: Manga 23, Mangueiro..."></div>
+          <div class="fgroup"><label>Data</label><input type="date" id="qmgData"></div>
+          <div class="fgroup"><label>Produto</label><input type="text" id="qmgProduto" placeholder="Sal Adensado..."></div>
+          <div class="fgroup"><label>Qtde. de cabeças na manga</label><input type="number" id="qmgQuantidadeLote" step="1"></div>
+          <div class="fgroup"><label>Quantidade fornecida (kg)</label><input type="number" id="qmgFornecida" step="0.1"></div>
+          <div class="fgroup"><label>Resíduo de cocho (kg)</label><input type="number" id="qmgResiduo" step="0.1" value="0"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="qmgObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddManga"><i class="ti ti-check"></i> Registrar</button>
+      </div>
+    </div>
+
+    <div class="pagehead">
+      <div class="pagetitle" style="font-size:16px">Histórico por manga</div>
+      <select id="filtroFazendaManga" style="min-width:220px"></select>
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Manga</th><th>Data</th><th>Produto</th><th style="text-align:right">Cabeças</th><th style="text-align:right">Fornecido (kg)</th><th style="text-align:right">Resíduo (kg)</th><th style="text-align:right">Intervalo</th><th style="text-align:right">Consumo (kg/cab./dia)</th><th></th></tr></thead>
+          <tbody id="tbodyManga"><tr class="empty-row"><td colspan="9"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div id="abaVendas" style="display:none">
     <div class="card">
       <div class="cardh"><i class="ti ti-plus"></i> Nova venda</div>
@@ -163,7 +196,7 @@ document.getElementById('mainContent').innerHTML = `
 `;
 
 function mostrarAba(aba) {
-  ['formulas', 'producao', 'consumo', 'vendas', 'estoque'].forEach(a => {
+  ['formulas', 'producao', 'consumo', 'manga', 'vendas', 'estoque'].forEach(a => {
     document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
     document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
   });
@@ -184,12 +217,15 @@ async function carregarBase() {
   const opcoesFazendas = EMPRESAS.filter(e => e.tem_rebanho).map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('qvEmpresa').innerHTML = opcoesFazendas;
   document.getElementById('qcEmpresa').innerHTML = opcoesFazendas;
+  document.getElementById('qmgEmpresa').innerHTML = opcoesFazendas;
+  document.getElementById('filtroFazendaManga').innerHTML = `<option value="">Todas as fazendas</option>` + opcoesFazendas;
 
-  ['qpData', 'qvData', 'qeData', 'qcData'].forEach(id => document.getElementById(id).value = hojeISO());
+  ['qpData', 'qvData', 'qeData', 'qcData', 'qmgData'].forEach(id => document.getElementById(id).value = hojeISO());
 
   carregarFormulas();
   carregarProducoes();
   carregarConsumo();
+  carregarConsumoManga();
   carregarVendas();
   carregarEstoque();
 
@@ -281,6 +317,81 @@ async function carregarConsumo() {
     `).join('');
 }
 async function excluirConsumo(id) { await supabaseClient.from('acertos_sal_pasto').delete().eq('id', id); carregarConsumo(); }
+
+// ---------- Consumo por manga (controle zootécnico de cocho) ----------
+document.getElementById('filtroFazendaManga').addEventListener('change', carregarConsumoManga);
+
+document.getElementById('btnAddManga').addEventListener('click', async () => {
+  const empresa_id = Number(document.getElementById('qmgEmpresa').value);
+  const manga = document.getElementById('qmgManga').value.trim();
+  const data = document.getElementById('qmgData').value;
+  const quantidade_fornecida_kg = parseFloat(document.getElementById('qmgFornecida').value);
+  if (!empresa_id || !manga || !data || isNaN(quantidade_fornecida_kg)) return;
+
+  await supabaseClient.from('sal_consumo_manga').insert({
+    empresa_id, manga, data,
+    produto: document.getElementById('qmgProduto').value || null,
+    quantidade_lote: parseFloat(document.getElementById('qmgQuantidadeLote').value) || null,
+    quantidade_fornecida_kg,
+    residuo_cocho_kg: parseFloat(document.getElementById('qmgResiduo').value) || 0,
+    observacao: document.getElementById('qmgObservacao').value || null,
+  });
+
+  ['qmgProduto', 'qmgQuantidadeLote', 'qmgFornecida', 'qmgObservacao'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('qmgResiduo').value = '0';
+  carregarConsumoManga();
+});
+
+async function carregarConsumoManga() {
+  const fazendaId = document.getElementById('filtroFazendaManga').value;
+  let query = supabaseClient.from('sal_consumo_manga').select('*');
+  if (fazendaId) query = query.eq('empresa_id', Number(fazendaId));
+  const { data } = await query;
+  const registros = data || [];
+
+  // agrupa por empresa+manga pra calcular o intervalo em relação ao registro anterior
+  const porManga = new Map();
+  registros.forEach(r => {
+    const chave = `${r.empresa_id}_${r.manga}`;
+    if (!porManga.has(chave)) porManga.set(chave, []);
+    porManga.get(chave).push(r);
+  });
+
+  const linhas = [];
+  porManga.forEach(lista => {
+    lista.sort((a, b) => a.data.localeCompare(b.data));
+    lista.forEach((r, i) => {
+      const anterior = i > 0 ? lista[i - 1] : null;
+      const intervalo = anterior ? Math.round((new Date(r.data) - new Date(anterior.data)) / 86400000) : null;
+      const efetivo = Number(r.quantidade_fornecida_kg) - Number(r.residuo_cocho_kg || 0);
+      const consumo = (intervalo && r.quantidade_lote) ? efetivo / (intervalo * Number(r.quantidade_lote)) : null;
+      linhas.push({ ...r, intervalo, consumo });
+    });
+  });
+
+  linhas.sort((a, b) => b.data.localeCompare(a.data) || a.manga.localeCompare(b.manga));
+
+  document.getElementById('tbodyManga').innerHTML = linhas.length === 0
+    ? '<tr class="empty-row"><td colspan="9">Nenhum registro.</td></tr>'
+    : linhas.map(r => `
+      <tr>
+        <td>${r.manga}${!fazendaId ? ` <span style="color:var(--text-dim);font-size:11px">(${nomeEmpresa(r.empresa_id)})</span>` : ''}</td>
+        <td>${new Date(r.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td>${r.produto || '—'}</td>
+        <td style="text-align:right">${r.quantidade_lote ?? '—'}</td>
+        <td style="text-align:right">${r.quantidade_fornecida_kg}</td>
+        <td style="text-align:right">${r.residuo_cocho_kg || 0}</td>
+        <td style="text-align:right">${r.intervalo !== null ? r.intervalo + ' d' : '—'}</td>
+        <td style="text-align:right">${r.consumo !== null ? r.consumo.toFixed(3) : '—'}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirManga(${r.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+
+async function excluirManga(id) {
+  await supabaseClient.from('sal_consumo_manga').delete().eq('id', id);
+  carregarConsumoManga();
+}
 
 // ---------- Vendas ----------
 document.getElementById('btnAddVenda').addEventListener('click', async () => {
