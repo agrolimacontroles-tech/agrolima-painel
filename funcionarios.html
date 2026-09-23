@@ -18,6 +18,10 @@
 .obs-btn.tem-obs { color: var(--info); }
 .legenda-status { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .legenda-chip { font-size: 11px; padding: 3px 9px; border-radius: 5px; font-weight: 500; }
+.dia-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+.dia-item:last-child { border-bottom: none; }
+.dia-item select { font-size: 12px; padding: 4px 6px; border-radius: 5px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); font-weight: 500; }
+.dia-item input[type="text"] { font-size: 12px; padding: 5px 8px; border-radius: 5px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); }
 </style>
 </head>
 <body>
@@ -69,13 +73,27 @@ document.getElementById('mainContent').innerHTML = `
 
   <div id="abaDias" style="display:none">
     <div class="pagehead">
-      <div class="pagetitle" style="font-size:16px">Grade do mês</div>
-      <input type="month" id="filtroMesDias">
+      <div class="pagetitle" style="font-size:16px">Lançamento do dia</div>
+      <input type="date" id="filtroDiaDias">
     </div>
     <div class="card">
       <div class="cardb">
         <div class="legenda-status" id="legendaStatus"></div>
-        <div class="table-wrap">
+        <div id="listaDiaDias"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-secondary" id="btnExpandirMes" onclick="alternarGradeMes()" style="margin-bottom:10px">
+      <i class="ti ti-chevron-down" id="iconeExpandirMes"></i> Ver grade do mês inteiro
+    </button>
+
+    <div id="blocoGradeMes" style="display:none">
+      <div class="pagehead">
+        <div class="pagetitle" style="font-size:16px">Grade do mês</div>
+        <input type="month" id="filtroMesDias">
+      </div>
+      <div class="card">
+        <div class="cardb table-wrap">
           <table class="grid-dias" id="tabelaGridDias"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
         </div>
       </div>
@@ -164,12 +182,13 @@ async function carregarBase() {
   EMPRESAS = empresas || [];
   document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('fDataAdmissao').value = hojeISO();
+  document.getElementById('filtroDiaDias').value = hojeISO();
   document.getElementById('filtroMesDias').value = mesAtualISO();
   document.getElementById('filtroMesAtividades').value = mesAtualISO();
   renderLegendaStatus();
 
   await carregarFuncionarios();
-  await carregarGridDias();
+  await carregarListaDia();
   await carregarGridAtividades();
   await carregarFerias();
 
@@ -255,8 +274,68 @@ async function excluirFuncionario(id) {
   await supabaseClient.from('funcionario_ferias').delete().eq('funcionario_id', id);
   await supabaseClient.from('funcionarios').delete().eq('id', id);
   carregarFuncionarios();
-  carregarGridDias();
+  carregarListaDia();
+  if (document.getElementById('blocoGradeMes').style.display !== 'none') carregarGridDias();
   carregarFerias();
+}
+
+// ---------- Dias trabalhados — lançamento rápido do dia ----------
+document.getElementById('filtroDiaDias').addEventListener('change', carregarListaDia);
+
+async function carregarListaDia() {
+  const data = document.getElementById('filtroDiaDias').value;
+  const ativos = FUNCIONARIOS.filter(f => f.status !== 'demitido');
+
+  const { data: registros } = await supabaseClient.from('funcionario_dias_trabalhados').select('*').eq('data', data);
+  const mapa = new Map((registros || []).map(r => [r.funcionario_id, r]));
+
+  document.getElementById('listaDiaDias').innerHTML = ativos.length === 0
+    ? '<p style="color:var(--text-dim);font-size:13px">Nenhum funcionário ativo cadastrado.</p>'
+    : ativos.map(f => {
+      const registro = mapa.get(f.id);
+      const status = registro ? registro.status : '';
+      const cor = STATUS_CORES[status];
+      const estilo = cor ? `style="background:${cor.bg};color:${cor.fg}"` : '';
+      return `
+        <div class="dia-item">
+          <div style="flex:1;font-weight:500">${f.nome}${f.cargo ? `<span style="color:var(--text-dim);font-weight:400"> — ${f.cargo}</span>` : ''}</div>
+          <select ${estilo} style="min-width:170px" onchange="salvarDiaTrabalhadoLista(${f.id}, '${data}', this.value)">
+            <option value="">—</option>
+            ${STATUS_OPCOES.map(s => `<option value="${s}" ${status === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+          <input type="text" placeholder="Observação" value="${(registro && registro.observacao ? registro.observacao : '').replace(/"/g, '&quot;')}"
+                 style="flex:1;max-width:260px;margin-left:8px"
+                 onblur="salvarObsDiaLista(${f.id}, '${data}', this.value)">
+        </div>
+      `;
+    }).join('');
+}
+
+async function salvarDiaTrabalhadoLista(funcionarioId, data, status) {
+  await salvarDiaTrabalhado(funcionarioId, data, status, false);
+  carregarListaDia();
+}
+
+async function salvarObsDiaLista(funcionarioId, data, observacao) {
+  const { data: existente } = await supabaseClient.from('funcionario_dias_trabalhados').select('*').eq('funcionario_id', funcionarioId).eq('data', data).maybeSingle();
+  if (!existente && !observacao) return;
+  await supabaseClient.from('funcionario_dias_trabalhados').upsert(
+    { funcionario_id: funcionarioId, data, status: existente ? existente.status : 'Trabalhou', observacao: observacao || null },
+    { onConflict: 'funcionario_id,data' }
+  );
+}
+
+let gradeMesCarregada = false;
+async function alternarGradeMes() {
+  const bloco = document.getElementById('blocoGradeMes');
+  const icone = document.getElementById('iconeExpandirMes');
+  const abrindo = bloco.style.display === 'none';
+  bloco.style.display = abrindo ? '' : 'none';
+  icone.className = abrindo ? 'ti ti-chevron-up' : 'ti ti-chevron-down';
+  if (abrindo && !gradeMesCarregada) {
+    gradeMesCarregada = true;
+    await carregarGridDias();
+  }
 }
 
 // ---------- Dias trabalhados (grade do mês) ----------
@@ -303,13 +382,13 @@ async function carregarGridDias() {
   window._mapaRegistrosDias = mapaRegistros;
 }
 
-async function salvarDiaTrabalhado(funcionarioId, data, status) {
+async function salvarDiaTrabalhado(funcionarioId, data, status, atualizarGrade = true) {
   if (!status) {
     await supabaseClient.from('funcionario_dias_trabalhados').delete().eq('funcionario_id', funcionarioId).eq('data', data);
   } else {
     await supabaseClient.from('funcionario_dias_trabalhados').upsert({ funcionario_id: funcionarioId, data, status }, { onConflict: 'funcionario_id,data' });
   }
-  carregarGridDias();
+  if (atualizarGrade) carregarGridDias();
 }
 
 async function editarObsDia(funcionarioId, data) {
