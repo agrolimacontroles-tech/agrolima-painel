@@ -39,6 +39,10 @@ document.getElementById('mainContent').innerHTML = `
       <div class="cardb">
         <div class="frow cols-3">
           <div class="fgroup">
+            <label>Nome da fórmula</label>
+            <input type="text" id="qfNome" placeholder="Fórmula 1">
+          </div>
+          <div class="fgroup">
             <label>Produto</label>
             <input type="text" id="qfProduto" placeholder="Sal de Transição..." list="listaProdutosExistentes">
             <datalist id="listaProdutosExistentes"></datalist>
@@ -60,7 +64,7 @@ document.getElementById('mainContent').innerHTML = `
     <div class="card">
       <div class="cardb table-wrap">
         <table>
-          <thead><tr><th>Produto</th><th>Insumo</th><th style="text-align:right">Quantidade</th><th>Unidade</th><th></th></tr></thead>
+          <thead><tr><th>Fórmula</th><th>Insumo</th><th style="text-align:right">Quantidade</th><th>Unidade</th><th></th></tr></thead>
           <tbody id="tbodyFormulas"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
         </table>
       </div>
@@ -72,12 +76,18 @@ document.getElementById('mainContent').innerHTML = `
       <div class="cardh"><i class="ti ti-plus"></i> Nova produção</div>
       <div class="cardb">
         <div class="frow cols-3">
+          <div class="fgroup">
+            <label>Fórmula</label>
+            <select id="qpFormula"></select>
+          </div>
           <div class="fgroup"><label>Data</label><input type="date" id="qpData"></div>
           <div class="fgroup"><label>Produto</label><input type="text" id="qpProduto"></div>
           <div class="fgroup"><label>Lote (kg)</label><input type="number" id="qpLoteKg" step="0.01"></div>
           <div class="fgroup"><label>Custo total</label><input type="number" id="qpCustoTotal" step="0.01"></div>
           <div class="fgroup full"><label>Observação</label><input type="text" id="qpObservacao"></div>
         </div>
+
+        <div id="previewFormula" style="display:none;margin-top:10px;padding:10px 12px;background:var(--track-bg);border-radius:8px;font-size:12px"></div>
 
         <div style="margin-top:14px">
           <label style="font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.3px">Insumos usados</label>
@@ -333,23 +343,36 @@ function removerLinhaInsumoFormula(idx) {
   renderLinhasInsumosFormula();
 }
 
+document.getElementById('qfNome').addEventListener('focus', function () {
+  if (!this.value) this.value = `Fórmula ${FORMULAS_CACHE.length + 1}`;
+}, { once: true });
+
 document.getElementById('btnAddFormula').addEventListener('click', async () => {
+  const nome = document.getElementById('qfNome').value.trim();
   const produto = document.getElementById('qfProduto').value.trim();
   const msg = document.getElementById('msgFormula');
   const linhasValidas = linhasInsumosFormula.filter(l => l.insumo_id && l.quantidade > 0 && l.unidade);
 
-  if (!produto || linhasValidas.length === 0) {
-    msg.textContent = 'Preencha o produto e pelo menos um insumo com quantidade e unidade.';
+  if (!nome || !produto || linhasValidas.length === 0) {
+    msg.textContent = 'Preencha o nome da fórmula, o produto e pelo menos um insumo com quantidade e unidade.';
     msg.className = 'msg show error';
     return;
   }
 
-  await supabaseClient.from('sal_formulas').insert(
-    linhasValidas.map(l => ({ produto, insumo_id: l.insumo_id, quantidade_por_lote: l.quantidade, unidade: l.unidade }))
+  const { data: formula, error } = await supabaseClient.from('sal_formulas').insert({ nome, produto }).select().single();
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  await supabaseClient.from('sal_formula_itens').insert(
+    linhasValidas.map(l => ({ formula_id: formula.id, insumo_id: l.insumo_id, quantidade: l.quantidade, unidade: l.unidade }))
   );
 
   msg.textContent = 'Fórmula salva!';
   msg.className = 'msg show success';
+  document.getElementById('qfNome').value = '';
   document.getElementById('qfProduto').value = '';
   linhasInsumosFormula = [];
   adicionarLinhaInsumoFormula();
@@ -357,39 +380,57 @@ document.getElementById('btnAddFormula').addEventListener('click', async () => {
   setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
 });
 
-let FORMULAS_CACHE = [];
+let FORMULAS_CACHE = [];       // cabeçalhos: [{id, nome, produto}]
+let FORMULA_ITENS_CACHE = new Map(); // formula_id -> [{insumo_id, quantidade, unidade}]
+
 async function carregarFormulas() {
-  const { data } = await supabaseClient.from('sal_formulas').select('*').order('produto').order('id');
-  FORMULAS_CACHE = data || [];
+  const [{ data: formulas }, itens] = await Promise.all([
+    supabaseClient.from('sal_formulas').select('*').order('id'),
+    buscarPaginado(() => supabaseClient.from('sal_formula_itens').select('*')),
+  ]);
+  FORMULAS_CACHE = formulas || [];
+
+  FORMULA_ITENS_CACHE = new Map();
+  itens.forEach(it => {
+    if (!FORMULA_ITENS_CACHE.has(it.formula_id)) FORMULA_ITENS_CACHE.set(it.formula_id, []);
+    FORMULA_ITENS_CACHE.get(it.formula_id).push(it);
+  });
 
   document.getElementById('listaProdutosExistentes').innerHTML = [...new Set(FORMULAS_CACHE.map(f => f.produto))].map(p => `<option value="${p}"></option>`).join('');
+
+  renderSelectFormulaProducao();
 
   if (FORMULAS_CACHE.length === 0) {
     document.getElementById('tbodyFormulas').innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma fórmula cadastrada.</td></tr>';
     return;
   }
 
-  const porProduto = new Map();
-  FORMULAS_CACHE.forEach(f => {
-    if (!porProduto.has(f.produto)) porProduto.set(f.produto, []);
-    porProduto.get(f.produto).push(f);
-  });
-
   let html = '';
-  porProduto.forEach((linhas, produto) => {
-    linhas.forEach((f, i) => {
+  FORMULAS_CACHE.forEach(f => {
+    const itensFormula = FORMULA_ITENS_CACHE.get(f.id) || [];
+    if (itensFormula.length === 0) {
+      html += `<tr><td style="font-weight:600">${f.nome} <span style="color:var(--text-dim);font-weight:400">— ${f.produto}</span></td><td colspan="3" style="color:var(--text-dim)">Nenhum insumo</td><td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirFormula(${f.id})"><i class="ti ti-trash"></i></button></td></tr>`;
+      return;
+    }
+    itensFormula.forEach((it, i) => {
       html += `
         <tr>
-          ${i === 0 ? `<td rowspan="${linhas.length}" style="font-weight:600;vertical-align:top">${produto}</td>` : ''}
-          <td>${nomeInsumo(f.insumo_id)}</td><td style="text-align:right">${f.quantidade_por_lote}</td><td>${f.unidade}</td>
-          <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirFormula(${f.id})"><i class="ti ti-trash"></i></button></td>
+          ${i === 0 ? `<td rowspan="${itensFormula.length}" style="font-weight:600;vertical-align:top">${f.nome}<br><span style="color:var(--text-dim);font-weight:400;font-size:12px">${f.produto}</span></td>` : ''}
+          <td>${nomeInsumo(it.insumo_id)}</td><td style="text-align:right">${it.quantidade}</td><td>${it.unidade}</td>
+          ${i === 0 ? `<td rowspan="${itensFormula.length}"><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirFormula(${f.id})"><i class="ti ti-trash"></i></button></td>` : ''}
         </tr>
       `;
     });
   });
   document.getElementById('tbodyFormulas').innerHTML = html;
 }
-async function excluirFormula(id) { await supabaseClient.from('sal_formulas').delete().eq('id', id); carregarFormulas(); }
+
+async function excluirFormula(id) {
+  if (!confirm('Excluir essa fórmula e todos os insumos dela?')) return;
+  await supabaseClient.from('sal_formula_itens').delete().eq('formula_id', id);
+  await supabaseClient.from('sal_formulas').delete().eq('id', id);
+  carregarFormulas();
+}
 
 // ---------- Produção ----------
 function renderLinhasInsumosProducao() {
@@ -422,13 +463,31 @@ function removerLinhaInsumo(idx) {
   renderLinhasInsumosProducao();
 }
 
-// sugere os insumos da fórmula cadastrada pro produto digitado (se existir)
-document.getElementById('qpProduto').addEventListener('blur', () => {
-  const produto = document.getElementById('qpProduto').value.trim();
-  const formulasDoProduto = FORMULAS_CACHE.filter(f => f.produto.toLowerCase() === produto.toLowerCase());
-  if (formulasDoProduto.length === 0) return;
-  linhasInsumosProducao = formulasDoProduto.map(f => ({ insumo_id: f.insumo_id, quantidade: f.quantidade_por_lote }));
+function renderSelectFormulaProducao() {
+  document.getElementById('qpFormula').innerHTML = '<option value="">— Produção avulsa (sem fórmula) —</option>' +
+    FORMULAS_CACHE.map(f => `<option value="${f.id}">${f.nome} — ${f.produto}</option>`).join('');
+}
+
+document.getElementById('qpFormula').addEventListener('change', () => {
+  const formulaId = Number(document.getElementById('qpFormula').value) || null;
+  const preview = document.getElementById('previewFormula');
+
+  if (!formulaId) {
+    preview.style.display = 'none';
+    return;
+  }
+
+  const formula = FORMULAS_CACHE.find(f => f.id === formulaId);
+  const itens = FORMULA_ITENS_CACHE.get(formulaId) || [];
+
+  document.getElementById('qpProduto').value = formula.produto;
+  linhasInsumosProducao = itens.map(it => ({ insumo_id: it.insumo_id, quantidade: it.quantidade }));
   renderLinhasInsumosProducao();
+
+  preview.style.display = '';
+  preview.innerHTML = itens.length === 0
+    ? '<i>Essa fórmula ainda não tem insumos cadastrados.</i>'
+    : '<b>Composição da fórmula:</b> ' + itens.map(it => `${nomeInsumo(it.insumo_id)} (${it.quantidade} ${it.unidade})`).join(', ');
 });
 
 document.getElementById('btnAddProducao').addEventListener('click', async () => {
@@ -456,6 +515,7 @@ document.getElementById('btnAddProducao').addEventListener('click', async () => 
 
   const { data: producao, error } = await supabaseClient.from('sal_producoes').insert({
     data, produto, lote_kg,
+    formula_id: Number(document.getElementById('qpFormula').value) || null,
     custo_total: parseFloat(document.getElementById('qpCustoTotal').value) || null,
     observacao: document.getElementById('qpObservacao').value || null,
   }).select().single();
@@ -476,6 +536,8 @@ document.getElementById('btnAddProducao').addEventListener('click', async () => 
   msg.textContent = 'Produção salva! Estoque atualizado.';
   msg.className = 'msg show success';
   ['qpProduto', 'qpLoteKg', 'qpCustoTotal', 'qpObservacao'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('qpFormula').value = '';
+  document.getElementById('previewFormula').style.display = 'none';
   linhasInsumosProducao = [];
   adicionarLinhaInsumo();
   carregarProducoes();

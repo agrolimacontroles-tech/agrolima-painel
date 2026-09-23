@@ -253,20 +253,32 @@ create table sal_insumos (
 
 alter table sal_insumos disable row level security;
 
+-- Fórmula é uma entidade própria (não agrupada por texto de produto) — "Fórmula 1",
+-- "Fórmula 2"... Na Produção você escolhe a fórmula pelo nome e o sistema já mostra
+-- e pré-preenche os insumos dela.
 create table sal_formulas (
   id serial primary key,
-  produto text not null,              -- 'Sal de Transição', 'Adensado Águas', ...
-  insumo_id int not null references sal_insumos(id),
-  quantidade_por_lote numeric not null,
-  unidade text not null                -- 'kg' | 'saco' | '%'
+  nome text not null,                 -- 'Fórmula 1', 'Fórmula 2', ...
+  produto text not null                -- 'Sal de Transição', 'Adensado Águas', ...
 );
 
 alter table sal_formulas disable row level security;
+
+create table sal_formula_itens (
+  id bigserial primary key,
+  formula_id int not null references sal_formulas(id),
+  insumo_id int not null references sal_insumos(id),
+  quantidade numeric not null,
+  unidade text not null                -- 'kg' | 'saco' | '%'
+);
+
+alter table sal_formula_itens disable row level security;
 
 create table sal_producoes (
   id bigserial primary key,
   data date not null,
   produto text not null,
+  formula_id int references sal_formulas(id),  -- null = produção avulsa, sem fórmula cadastrada
   lote_kg numeric not null,
   custo_total numeric,
   observacao text
