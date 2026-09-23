@@ -38,12 +38,23 @@ document.getElementById('mainContent').innerHTML = `
       <div class="cardh"><i class="ti ti-plus"></i> Nova fórmula</div>
       <div class="cardb">
         <div class="frow cols-3">
-          <div class="fgroup"><label>Produto</label><input type="text" id="qfProduto" placeholder="Sal de Transição..."></div>
-          <div class="fgroup"><label>Insumo</label><select id="qfInsumo"></select></div>
-          <div class="fgroup"><label>Quantidade por lote</label><input type="number" id="qfQuantidade" step="0.01"></div>
-          <div class="fgroup"><label>Unidade</label><input type="text" id="qfUnidade" placeholder="kg, saco, %"></div>
+          <div class="fgroup">
+            <label>Produto</label>
+            <input type="text" id="qfProduto" placeholder="Sal de Transição..." list="listaProdutosExistentes">
+            <datalist id="listaProdutosExistentes"></datalist>
+          </div>
         </div>
-        <button class="btn btn-primary" id="btnAddFormula"><i class="ti ti-check"></i> Adicionar</button>
+
+        <div style="margin-top:10px">
+          <label style="font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.3px">Insumos dessa fórmula</label>
+          <div id="linhasInsumosFormula" style="margin-top:6px"></div>
+          <button class="btn btn-secondary" id="btnAddLinhaInsumoFormula" style="margin-top:6px" type="button"><i class="ti ti-plus"></i> Adicionar insumo</button>
+        </div>
+
+        <div style="margin-top:14px">
+          <button class="btn btn-primary" id="btnAddFormula"><i class="ti ti-check"></i> Salvar fórmula</button>
+          <span id="msgFormula" class="msg" style="display:inline-block;margin-left:10px"></span>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -252,6 +263,7 @@ async function carregarBase() {
   renderInsumos();
 
   adicionarLinhaInsumo();
+  adicionarLinhaInsumoFormula();
 
   carregarFormulas();
   carregarProducoes();
@@ -281,39 +293,101 @@ document.getElementById('btnAddInsumo').addEventListener('click', async () => {
 });
 
 function renderInsumos() {
-  const opcoes = INSUMOS.map(i => `<option value="${i.id}">${i.nome}${i.unidade ? ' (' + i.unidade + ')' : ''}</option>`).join('') || '<option value="">Cadastre um insumo primeiro</option>';
-  document.getElementById('qfInsumo').innerHTML = opcoes;
-  document.getElementById('qeInsumo').innerHTML = opcoes;
+  document.getElementById('qeInsumo').innerHTML = INSUMOS.map(i => `<option value="${i.id}">${i.nome}${i.unidade ? ' (' + i.unidade + ')' : ''}</option>`).join('') || '<option value="">Cadastre um insumo primeiro</option>';
   document.getElementById('listaInsumos').innerHTML = INSUMOS.map(i => `<span class="badge bg-info">${i.nome}${i.unidade ? ' — ' + i.unidade : ''}</span>`).join('');
   renderLinhasInsumosProducao();
+  renderLinhasInsumosFormula();
 }
 
 // ---------- Fórmulas ----------
+let linhasInsumosFormula = []; // [{insumo_id, quantidade, unidade}]
+
+function renderLinhasInsumosFormula() {
+  document.getElementById('linhasInsumosFormula').innerHTML = linhasInsumosFormula.map((linha, idx) => `
+    <div class="frow cols-3" style="margin-bottom:6px">
+      <div class="fgroup">
+        <select onchange="linhasInsumosFormula[${idx}].insumo_id = Number(this.value)">
+          ${INSUMOS.length === 0 ? '<option value="">Cadastre um insumo primeiro</option>' :
+            INSUMOS.map(i => `<option value="${i.id}" ${i.id === linha.insumo_id ? 'selected' : ''}>${i.nome}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fgroup">
+        <input type="number" step="0.01" placeholder="Quantidade por lote" value="${linha.quantidade || ''}" oninput="linhasInsumosFormula[${idx}].quantidade = parseFloat(this.value) || 0">
+      </div>
+      <div class="fgroup" style="display:flex;flex-direction:row;gap:6px;align-items:center">
+        <input type="text" placeholder="kg, saco, %" style="flex:1" value="${linha.unidade || ''}" oninput="linhasInsumosFormula[${idx}].unidade = this.value">
+        <button class="btn btn-danger" type="button" style="padding:4px 10px" onclick="removerLinhaInsumoFormula(${idx})"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>
+  `).join('') || '<p style="color:var(--text-dim);font-size:12px">Nenhum insumo adicionado ainda.</p>';
+}
+
+function adicionarLinhaInsumoFormula() {
+  linhasInsumosFormula.push({ insumo_id: INSUMOS[0] ? INSUMOS[0].id : null, quantidade: null, unidade: 'kg' });
+  renderLinhasInsumosFormula();
+}
+document.getElementById('btnAddLinhaInsumoFormula').addEventListener('click', adicionarLinhaInsumoFormula);
+
+function removerLinhaInsumoFormula(idx) {
+  linhasInsumosFormula.splice(idx, 1);
+  renderLinhasInsumosFormula();
+}
+
 document.getElementById('btnAddFormula').addEventListener('click', async () => {
   const produto = document.getElementById('qfProduto').value.trim();
-  const insumo_id = Number(document.getElementById('qfInsumo').value);
-  const quantidade_por_lote = parseFloat(document.getElementById('qfQuantidade').value);
-  const unidade = document.getElementById('qfUnidade').value.trim();
-  if (!produto || !insumo_id || isNaN(quantidade_por_lote) || !unidade) return;
-  await supabaseClient.from('sal_formulas').insert({ produto, insumo_id, quantidade_por_lote, unidade });
+  const msg = document.getElementById('msgFormula');
+  const linhasValidas = linhasInsumosFormula.filter(l => l.insumo_id && l.quantidade > 0 && l.unidade);
+
+  if (!produto || linhasValidas.length === 0) {
+    msg.textContent = 'Preencha o produto e pelo menos um insumo com quantidade e unidade.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  await supabaseClient.from('sal_formulas').insert(
+    linhasValidas.map(l => ({ produto, insumo_id: l.insumo_id, quantidade_por_lote: l.quantidade, unidade: l.unidade }))
+  );
+
+  msg.textContent = 'Fórmula salva!';
+  msg.className = 'msg show success';
   document.getElementById('qfProduto').value = '';
-  document.getElementById('qfQuantidade').value = '';
-  document.getElementById('qfUnidade').value = '';
+  linhasInsumosFormula = [];
+  adicionarLinhaInsumoFormula();
   carregarFormulas();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
 });
 
 let FORMULAS_CACHE = [];
 async function carregarFormulas() {
-  const { data } = await supabaseClient.from('sal_formulas').select('*').order('produto');
+  const { data } = await supabaseClient.from('sal_formulas').select('*').order('produto').order('id');
   FORMULAS_CACHE = data || [];
-  document.getElementById('tbodyFormulas').innerHTML = FORMULAS_CACHE.length === 0
-    ? '<tr class="empty-row"><td colspan="5">Nenhuma fórmula cadastrada.</td></tr>'
-    : FORMULAS_CACHE.map(f => `
-      <tr>
-        <td>${f.produto}</td><td>${nomeInsumo(f.insumo_id)}</td><td style="text-align:right">${f.quantidade_por_lote}</td><td>${f.unidade}</td>
-        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirFormula(${f.id})"><i class="ti ti-trash"></i></button></td>
-      </tr>
-    `).join('');
+
+  document.getElementById('listaProdutosExistentes').innerHTML = [...new Set(FORMULAS_CACHE.map(f => f.produto))].map(p => `<option value="${p}"></option>`).join('');
+
+  if (FORMULAS_CACHE.length === 0) {
+    document.getElementById('tbodyFormulas').innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma fórmula cadastrada.</td></tr>';
+    return;
+  }
+
+  const porProduto = new Map();
+  FORMULAS_CACHE.forEach(f => {
+    if (!porProduto.has(f.produto)) porProduto.set(f.produto, []);
+    porProduto.get(f.produto).push(f);
+  });
+
+  let html = '';
+  porProduto.forEach((linhas, produto) => {
+    linhas.forEach((f, i) => {
+      html += `
+        <tr>
+          ${i === 0 ? `<td rowspan="${linhas.length}" style="font-weight:600;vertical-align:top">${produto}</td>` : ''}
+          <td>${nomeInsumo(f.insumo_id)}</td><td style="text-align:right">${f.quantidade_por_lote}</td><td>${f.unidade}</td>
+          <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirFormula(${f.id})"><i class="ti ti-trash"></i></button></td>
+        </tr>
+      `;
+    });
+  });
+  document.getElementById('tbodyFormulas').innerHTML = html;
 }
 async function excluirFormula(id) { await supabaseClient.from('sal_formulas').delete().eq('id', id); carregarFormulas(); }
 
