@@ -9,15 +9,15 @@
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-.grid-dias { font-size: 12px; }
-.grid-dias th, .grid-dias td { padding: 4px 6px; white-space: nowrap; }
-.grid-dias select { font-size: 11px; padding: 2px 4px; border-radius: 5px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); }
-.status-Trabalhou, .status-ExpedienteNormal { color: var(--success); }
-.status-Falta, .status-DiaIncompleto { color: var(--danger); }
-.status-Férias, .status-Licença, .status-Atestado { color: var(--warning); }
-.dia-fimdesemana { background: var(--track-bg); }
-.obs-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 0 2px; }
+.grid-dias { font-size: 12px; border-collapse: collapse; }
+.grid-dias th, .grid-dias td { padding: 3px 4px; white-space: nowrap; text-align: center; }
+.grid-dias thead th { background: #073763; color: #fff; position: sticky; top: 0; }
+.grid-dias select { font-size: 11px; padding: 2px 3px; border-radius: 4px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); font-weight: 500; }
+.dia-fimdesemana td:first-child { background: var(--track-bg); font-weight: 600; }
+.obs-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 0 2px; vertical-align: middle; }
 .obs-btn.tem-obs { color: var(--info); }
+.legenda-status { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.legenda-chip { font-size: 11px; padding: 3px 9px; border-radius: 5px; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -73,8 +73,11 @@ document.getElementById('mainContent').innerHTML = `
       <input type="month" id="filtroMesDias">
     </div>
     <div class="card">
-      <div class="cardb table-wrap">
-        <table class="grid-dias" id="tabelaGridDias"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+      <div class="cardb">
+        <div class="legenda-status" id="legendaStatus"></div>
+        <div class="table-wrap">
+          <table class="grid-dias" id="tabelaGridDias"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+        </div>
       </div>
     </div>
   </div>
@@ -117,7 +120,28 @@ document.getElementById('mainContent').innerHTML = `
   </div>
 `;
 
-const STATUS_OPCOES = ['Trabalhou', 'Falta', 'Férias', 'Atestado', 'Licença', 'Folga', 'Folga Concedida', 'Feriado', 'Extra +', 'Extra Solicitada', 'Dia Incompleto', 'Expediente Normal'];
+// Cores extraídas da planilha real (SETEMBRO.xlsx, legenda "STATUS E CORES")
+const STATUS_CORES = {
+  'Trabalhou':         { bg: '#93C47D', fg: '#1a3d0f' },
+  'Falta':             { bg: '#EA4335', fg: '#ffffff' },
+  'Férias':            { bg: '#E69138', fg: '#3d1f00' },
+  'Atestado':          { bg: '#B7E1CD', fg: '#0f3d24' },
+  'Licença':           { bg: '#F4CCCC', fg: '#5c1010' },
+  'Folga':             { bg: '#4A86E8', fg: '#ffffff' },
+  'Folga Concedida':   { bg: '#FFE599', fg: '#4d3b00' },
+  'Feriado':           { bg: '#FFFF00', fg: '#3d3d00' },
+  'Extra +':           { bg: '#B4A7D6', fg: '#2e1a4d' },
+  'Extra Solicitada':  { bg: '#46BDC6', fg: '#00363a' },
+  'Dia Incompleto':    { bg: '#C27BA0', fg: '#3d0f26' },
+  'Expediente Normal': { bg: '#93C47D', fg: '#1a3d0f' },
+};
+const STATUS_OPCOES = Object.keys(STATUS_CORES);
+
+function renderLegendaStatus() {
+  document.getElementById('legendaStatus').innerHTML = STATUS_OPCOES.map(s =>
+    `<span class="legenda-chip" style="background:${STATUS_CORES[s].bg};color:${STATUS_CORES[s].fg}">${s}</span>`
+  ).join('');
+}
 
 function mostrarAba(aba) {
   ['funcionarios', 'dias', 'atividades', 'ferias'].forEach(a => {
@@ -142,6 +166,7 @@ async function carregarBase() {
   document.getElementById('fDataAdmissao').value = hojeISO();
   document.getElementById('filtroMesDias').value = mesAtualISO();
   document.getElementById('filtroMesAtividades').value = mesAtualISO();
+  renderLegendaStatus();
 
   await carregarFuncionarios();
   await carregarGridDias();
@@ -260,8 +285,10 @@ async function carregarGridDias() {
       const registro = mapaRegistros.get(chave);
       const status = registro ? registro.status : '';
       const temObs = registro && registro.observacao;
+      const cor = STATUS_CORES[status];
+      const estilo = cor ? `style="background:${cor.bg};color:${cor.fg}"` : '';
       html += `<td>
-        <select class="status-${status.replace(/[^a-zA-ZÀ-ú]/g, '')}" onchange="salvarDiaTrabalhado(${f.id}, '${dataISO}', this.value)">
+        <select ${estilo} onchange="salvarDiaTrabalhado(${f.id}, '${dataISO}', this.value)">
           <option value="">—</option>
           ${STATUS_OPCOES.map(s => `<option value="${s}" ${status === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select>
