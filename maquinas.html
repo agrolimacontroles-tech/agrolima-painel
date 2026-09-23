@@ -8,6 +8,17 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+.maquina-bloco { background: var(--bg-panel); border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; flex: 1; min-width: 220px; }
+.maquina-bloco-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.maquina-icone { color: var(--accent, #4a9eff); flex-shrink: 0; }
+.maquina-nome { font-weight: 600; font-size: 15px; color: var(--text); }
+.maquina-tipo { font-size: 11px; color: var(--text-dim); }
+.maquina-linha { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; color: var(--text-muted); }
+.maquina-linha b { color: var(--text); font-weight: 600; }
+.blocos-maquinas { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
+</style>
 </head>
 <body>
 
@@ -20,7 +31,7 @@ document.getElementById('mainContent').innerHTML = `
   <div class="pagehead">
     <div>
       <div class="pagetitle">Máquinas</div>
-      <div class="pagesub">Uso diário (carregadeira, tratores) e faturamento automático de hora-máquina entre empresas</div>
+      <div class="pagesub">Uso diário, abastecimento, manutenção e faturamento entre empresas</div>
     </div>
   </div>
 
@@ -44,91 +55,167 @@ document.getElementById('mainContent').innerHTML = `
     </div>
   </div>
 
-  <div class="card">
-    <div class="cardh"><i class="ti ti-plus"></i> Novo uso</div>
-    <div class="cardb">
-      <div class="frow cols-3">
-        <div class="fgroup">
-          <label>Máquina</label>
-          <select id="fMaquina"></select>
+  <div class="subtoggle">
+    <button class="stbtn active" id="btnTabUso" onclick="mostrarAba('uso')">Uso Diário</button>
+    <button class="stbtn" id="btnTabAbastecimento" onclick="mostrarAba('abastecimento')">Abastecimento</button>
+    <button class="stbtn" id="btnTabManutencao" onclick="mostrarAba('manutencao')">Manutenção</button>
+    <button class="stbtn" id="btnTabRelatorio" onclick="mostrarAba('relatorio')">Relatório</button>
+  </div>
+
+  <div id="abaUso">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Novo uso</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup">
+            <label>Máquina</label>
+            <select id="fMaquina"></select>
+          </div>
+          <div class="fgroup">
+            <label>Empresa beneficiada</label>
+            <select id="fEmpresa"></select>
+          </div>
+          <div class="fgroup">
+            <label>Data</label>
+            <input type="date" id="fData">
+          </div>
+          <div class="fgroup">
+            <label>Responsável</label>
+            <input type="text" id="fResponsavel">
+          </div>
+          <div class="fgroup full">
+            <label>Serviço</label>
+            <input type="text" id="fServico">
+          </div>
+          <div class="fgroup">
+            <label>Horímetro inicial</label>
+            <input type="number" id="fHorimetroInicial" step="0.1">
+          </div>
+          <div class="fgroup">
+            <label>Horímetro final</label>
+            <input type="number" id="fHorimetroFinal" step="0.1">
+          </div>
+          <div class="fgroup">
+            <label>Valor da hora (R$)</label>
+            <input type="number" id="fValorHora" step="0.01" value="120">
+          </div>
         </div>
-        <div class="fgroup">
-          <label>Empresa beneficiada</label>
-          <select id="fEmpresa"></select>
-        </div>
-        <div class="fgroup">
-          <label>Data</label>
-          <input type="date" id="fData">
-        </div>
-        <div class="fgroup">
-          <label>Responsável</label>
-          <input type="text" id="fResponsavel">
-        </div>
-        <div class="fgroup full">
-          <label>Serviço</label>
-          <input type="text" id="fServico">
-        </div>
-        <div class="fgroup">
-          <label>Horímetro inicial</label>
-          <input type="number" id="fHorimetroInicial" step="0.1">
-        </div>
-        <div class="fgroup">
-          <label>Horímetro final</label>
-          <input type="number" id="fHorimetroFinal" step="0.1">
-        </div>
-        <div class="fgroup">
-          <label>Valor da hora (R$)</label>
-          <input type="number" id="fValorHora" step="0.01" value="120">
-        </div>
-        <div class="fgroup">
-          <label>Abastecimento (litros)</label>
-          <input type="number" id="fAbastecimento" step="0.1">
-        </div>
-        <div class="fgroup">
-          <label>Manutenção — descrição</label>
-          <input type="text" id="fManutencaoDescricao">
-        </div>
-        <div class="fgroup">
-          <label>Manutenção — valor</label>
-          <input type="number" id="fManutencaoValor" step="0.01">
+        <div style="margin-top:14px">
+          <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar uso</button>
+          <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
         </div>
       </div>
-      <div style="margin-top:14px">
-        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar uso</button>
-        <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
+    </div>
+
+    <div class="pagehead" style="margin-top:22px">
+      <div class="pagetitle" style="font-size:16px">Faturamento do mês por empresa</div>
+      <input type="month" id="filtroMes">
+    </div>
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Empresa</th><th style="text-align:right">Horas usadas</th><th style="text-align:right">Valor a faturar</th></tr></thead>
+          <tbody id="tbodyFaturamento"><tr class="empty-row"><td colspan="3"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-list"></i> Histórico de uso</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Máquina</th><th>Empresa</th><th>Serviço</th><th style="text-align:right">Horas</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+          <tbody id="tbodyUso"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+        </table>
       </div>
     </div>
   </div>
 
-  <div class="pagehead" style="margin-top:22px">
-    <div class="pagetitle" style="font-size:16px">Faturamento do mês por empresa</div>
-    <input type="month" id="filtroMes">
-  </div>
-  <div class="card">
-    <div class="cardb table-wrap">
-      <table>
-        <thead><tr><th>Empresa</th><th style="text-align:right">Horas usadas</th><th style="text-align:right">Valor a faturar</th></tr></thead>
-        <tbody id="tbodyFaturamento"><tr class="empty-row"><td colspan="3"><span class="spinner"></span></td></tr></tbody>
-      </table>
+  <div id="abaAbastecimento" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-gas-station"></i> Novo abastecimento</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Máquina</label><select id="qaMaquina"></select></div>
+          <div class="fgroup"><label>Data</label><input type="date" id="qaData"></div>
+          <div class="fgroup"><label>Quantidade (litros)</label><input type="number" id="qaLitros" step="0.1"></div>
+          <div class="fgroup"><label>Valor pago (R$)</label><input type="number" id="qaValor" step="0.01"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="qaObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddAbastecimento"><i class="ti ti-check"></i> Salvar abastecimento</button>
+        <span id="msgAbastecimento" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh"><i class="ti ti-list"></i> Histórico de abastecimento</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Máquina</th><th style="text-align:right">Litros</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+          <tbody id="tbodyAbastecimento"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="cardh"><i class="ti ti-list"></i> Histórico de uso</div>
-    <div class="cardb table-wrap">
-      <table>
-        <thead><tr><th>Data</th><th>Máquina</th><th>Empresa</th><th>Serviço</th><th style="text-align:right">Horas</th><th style="text-align:right">Valor</th><th></th></tr></thead>
-        <tbody id="tbodyUso"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
-      </table>
+  <div id="abaManutencao" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-tool"></i> Nova manutenção</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Máquina</label><select id="qmMaquina"></select></div>
+          <div class="fgroup"><label>Data da manutenção</label><input type="date" id="qmData"></div>
+          <div class="fgroup"><label>Horímetro na hora da manutenção</label><input type="number" id="qmHorimetro" step="0.1"></div>
+          <div class="fgroup full"><label>Serviço realizado</label><input type="text" id="qmServico"></div>
+          <div class="fgroup"><label>Prazo (horas)</label><input type="number" id="qmPrazo" step="1" placeholder="Ex: 250"></div>
+          <div class="fgroup"><label>Horímetro da próxima manutenção</label><input type="number" id="qmHorimetroProxima" step="0.1"></div>
+          <div class="fgroup"><label>Valor da manutenção (R$)</label><input type="number" id="qmValor" step="0.01"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddManutencao"><i class="ti ti-check"></i> Salvar manutenção</button>
+        <span id="msgManutencao" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh"><i class="ti ti-list"></i> Histórico de manutenção</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Máquina</th><th>Serviço</th><th style="text-align:right">Horímetro</th><th style="text-align:right">Próxima em</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+          <tbody id="tbodyManutencao"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaRelatorio" style="display:none">
+    <div class="pagehead">
+      <div class="pagetitle" style="font-size:16px">Relatório por máquina</div>
+      <input type="month" id="filtroMesRelatorio">
+    </div>
+
+    <div class="metrics" id="metricasRelatorio"></div>
+
+    <div class="blocos-maquinas" id="blocosMaquinas"></div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-chart-bar"></i> Receita x Custos por máquina</div>
+      <div class="cardb"><canvas id="chartMaquinas" height="90"></canvas></div>
     </div>
   </div>
 `;
 
 let EMPRESAS = [];
 let MAQUINAS = [];
+let chartMaquinasInstance = null;
 
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
 function mesAtualISO() { return new Date().toISOString().slice(0, 7); }
+
+function mostrarAba(aba) {
+  ['uso', 'abastecimento', 'manutencao', 'relatorio'].forEach(a => {
+    document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
+    document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
+  });
+  if (aba === 'relatorio') carregarRelatorio();
+}
 
 async function carregarBase() {
   await checkAuth();
@@ -144,13 +231,21 @@ async function carregarBase() {
   document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('fData').value = hojeISO();
   document.getElementById('filtroMes').value = mesAtualISO();
+  document.getElementById('qaData').value = hojeISO();
+  document.getElementById('qmData').value = hojeISO();
+  document.getElementById('filtroMesRelatorio').value = mesAtualISO();
 
   renderMaquinas();
   carregarUso();
+  carregarAbastecimento();
+  carregarManutencao();
 }
 
 function renderMaquinas() {
-  document.getElementById('fMaquina').innerHTML = MAQUINAS.map(m => `<option value="${m.id}">${m.nome}</option>`).join('') || '<option value="">Cadastre uma máquina primeiro</option>';
+  const opcoes = MAQUINAS.map(m => `<option value="${m.id}">${m.nome}</option>`).join('') || '<option value="">Cadastre uma máquina primeiro</option>';
+  document.getElementById('fMaquina').innerHTML = opcoes;
+  document.getElementById('qaMaquina').innerHTML = opcoes;
+  document.getElementById('qmMaquina').innerHTML = opcoes;
   document.getElementById('listaMaquinas').innerHTML = MAQUINAS.map(m => `<span class="badge bg-info">${m.nome}${m.tipo ? ' — ' + m.tipo : ''}</span>`).join('');
 }
 
@@ -166,6 +261,10 @@ document.getElementById('btnAddMaquina').addEventListener('click', async () => {
   renderMaquinas();
 });
 
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+function nomeMaquina(id) { return (MAQUINAS.find(m => m.id === id) || {}).nome || '—'; }
+
+// ---------- Uso diário ----------
 async function salvarUso() {
   const maquina_id = Number(document.getElementById('fMaquina').value);
   const empresa_beneficiada_id = Number(document.getElementById('fEmpresa').value);
@@ -193,9 +292,6 @@ async function salvarUso() {
     servico: document.getElementById('fServico').value || null,
     horimetro_inicial, horimetro_final,
     valor_hora: parseFloat(document.getElementById('fValorHora').value) || 120,
-    abastecimento_litros: parseFloat(document.getElementById('fAbastecimento').value) || null,
-    manutencao_descricao: document.getElementById('fManutencaoDescricao').value || null,
-    manutencao_valor: parseFloat(document.getElementById('fManutencaoValor').value) || null,
   });
   btn.disabled = false;
 
@@ -207,15 +303,12 @@ async function salvarUso() {
 
   msg.textContent = 'Uso salvo!';
   msg.className = 'msg show success';
-  ['fResponsavel', 'fServico', 'fHorimetroInicial', 'fHorimetroFinal', 'fAbastecimento', 'fManutencaoDescricao', 'fManutencaoValor'].forEach(id => document.getElementById(id).value = '');
+  ['fResponsavel', 'fServico', 'fHorimetroInicial', 'fHorimetroFinal'].forEach(id => document.getElementById(id).value = '');
   carregarUso();
   setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
 }
 document.getElementById('btnSalvar').addEventListener('click', salvarUso);
 document.getElementById('filtroMes').addEventListener('change', carregarUso);
-
-function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
-function nomeMaquina(id) { return (MAQUINAS.find(m => m.id === id) || {}).nome || '—'; }
 
 async function carregarUso() {
   const mes = document.getElementById('filtroMes').value;
@@ -258,6 +351,238 @@ async function carregarUso() {
 async function excluirUso(id) {
   await supabaseClient.from('uso_maquina').delete().eq('id', id);
   carregarUso();
+}
+
+// ---------- Abastecimento ----------
+document.getElementById('btnAddAbastecimento').addEventListener('click', async () => {
+  const maquina_id = Number(document.getElementById('qaMaquina').value);
+  const data = document.getElementById('qaData').value;
+  const litros = parseFloat(document.getElementById('qaLitros').value);
+  const valor = parseFloat(document.getElementById('qaValor').value);
+  const msg = document.getElementById('msgAbastecimento');
+
+  if (!maquina_id || !data || isNaN(litros) || isNaN(valor)) {
+    msg.textContent = 'Preencha máquina, data, litros e valor.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const { error } = await supabaseClient.from('abastecimento_maquina').insert({
+    maquina_id, data, litros, valor,
+    observacao: document.getElementById('qaObservacao').value || null,
+  });
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  msg.textContent = 'Abastecimento salvo!';
+  msg.className = 'msg show success';
+  ['qaLitros', 'qaValor', 'qaObservacao'].forEach(id => document.getElementById(id).value = '');
+  carregarAbastecimento();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+async function carregarAbastecimento() {
+  const dados = await buscarPaginado(() => supabaseClient.from('abastecimento_maquina').select('*').order('data', { ascending: false }));
+  document.getElementById('tbodyAbastecimento').innerHTML = dados.length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhum abastecimento registrado.</td></tr>'
+    : dados.map(a => `
+      <tr>
+        <td>${new Date(a.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td>${nomeMaquina(a.maquina_id)}</td>
+        <td style="text-align:right">${a.litros}</td>
+        <td style="text-align:right">${formatarMoeda(a.valor)}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirAbastecimento(${a.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+
+async function excluirAbastecimento(id) {
+  await supabaseClient.from('abastecimento_maquina').delete().eq('id', id);
+  carregarAbastecimento();
+}
+
+// ---------- Manutenção ----------
+function sugerirHorimetroProxima() {
+  const horimetro = parseFloat(document.getElementById('qmHorimetro').value);
+  const prazo = parseFloat(document.getElementById('qmPrazo').value);
+  if (!isNaN(horimetro) && !isNaN(prazo)) {
+    document.getElementById('qmHorimetroProxima').value = (horimetro + prazo).toFixed(1);
+  }
+}
+document.getElementById('qmHorimetro').addEventListener('input', sugerirHorimetroProxima);
+document.getElementById('qmPrazo').addEventListener('input', sugerirHorimetroProxima);
+
+document.getElementById('btnAddManutencao').addEventListener('click', async () => {
+  const maquina_id = Number(document.getElementById('qmMaquina').value);
+  const data = document.getElementById('qmData').value;
+  const horimetro = parseFloat(document.getElementById('qmHorimetro').value);
+  const msg = document.getElementById('msgManutencao');
+
+  if (!maquina_id || !data || isNaN(horimetro)) {
+    msg.textContent = 'Preencha máquina, data e horímetro.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const { error } = await supabaseClient.from('manutencao_maquina').insert({
+    maquina_id, data, horimetro,
+    servico_realizado: document.getElementById('qmServico').value || null,
+    prazo_horas: parseFloat(document.getElementById('qmPrazo').value) || null,
+    horimetro_proxima: parseFloat(document.getElementById('qmHorimetroProxima').value) || null,
+    valor: parseFloat(document.getElementById('qmValor').value) || null,
+  });
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  msg.textContent = 'Manutenção salva!';
+  msg.className = 'msg show success';
+  ['qmServico', 'qmHorimetro', 'qmPrazo', 'qmHorimetroProxima', 'qmValor'].forEach(id => document.getElementById(id).value = '');
+  carregarManutencao();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+async function carregarManutencao() {
+  const dados = await buscarPaginado(() => supabaseClient.from('manutencao_maquina').select('*').order('data', { ascending: false }));
+  document.getElementById('tbodyManutencao').innerHTML = dados.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhuma manutenção registrada.</td></tr>'
+    : dados.map(m => `
+      <tr>
+        <td>${new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td>${nomeMaquina(m.maquina_id)}</td>
+        <td>${m.servico_realizado || '—'}</td>
+        <td style="text-align:right">${m.horimetro}</td>
+        <td style="text-align:right">${m.horimetro_proxima ?? '—'}</td>
+        <td style="text-align:right">${formatarMoeda(m.valor)}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirManutencao(${m.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+
+async function excluirManutencao(id) {
+  await supabaseClient.from('manutencao_maquina').delete().eq('id', id);
+  carregarManutencao();
+}
+
+// ---------- Relatório ----------
+document.getElementById('filtroMesRelatorio').addEventListener('change', carregarRelatorio);
+
+function iconeMaquinaSvg(tipo) {
+  const t = (tipo || '').toLowerCase();
+  if (t.includes('carregadeira')) {
+    return `<svg width="64" height="52" viewBox="0 0 120 80" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="35" y="23" width="45" height="28" rx="3"/>
+      <path d="M35 38 L15 38 L15 53 L28 58 L35 53"/>
+      <path d="M8 48 L20 43 L20 58 L8 60 Z"/>
+      <circle cx="48" cy="62" r="12"/><circle cx="48" cy="62" r="4"/>
+      <circle cx="75" cy="62" r="12"/><circle cx="75" cy="62" r="4"/>
+    </svg>`;
+  }
+  if (t.includes('trator')) {
+    return `<svg width="64" height="52" viewBox="0 0 120 80" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 53 h20 v-14 h18 l8 -14 h20 v28"/>
+      <rect x="56" y="15" width="20" height="18" rx="2"/>
+      <line x1="10" y1="53" x2="96" y2="53"/>
+      <circle cx="26" cy="61" r="16"/><circle cx="26" cy="61" r="5"/>
+      <circle cx="88" cy="61" r="9"/><circle cx="88" cy="61" r="3"/>
+    </svg>`;
+  }
+  return `<i class="ti ti-tool" style="font-size:44px"></i>`;
+}
+
+async function carregarRelatorio() {
+  const mes = document.getElementById('filtroMesRelatorio').value;
+  const inicio = mes + '-01';
+  const fimData = new Date(mes + '-01T00:00:00');
+  const fim = new Date(fimData.getFullYear(), fimData.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+  const [usos, abastecimentos, manutencoes, todasManutencoes, todosUsos] = await Promise.all([
+    buscarPaginado(() => supabaseClient.from('uso_maquina').select('*').gte('data', inicio).lte('data', fim)),
+    buscarPaginado(() => supabaseClient.from('abastecimento_maquina').select('*').gte('data', inicio).lte('data', fim)),
+    buscarPaginado(() => supabaseClient.from('manutencao_maquina').select('*').gte('data', inicio).lte('data', fim)),
+    buscarPaginado(() => supabaseClient.from('manutencao_maquina').select('*').order('data', { ascending: false })),
+    buscarPaginado(() => supabaseClient.from('uso_maquina').select('*').order('data', { ascending: false })),
+  ]);
+
+  const porMaquina = new Map();
+  MAQUINAS.forEach(m => porMaquina.set(m.id, { nome: m.nome, tipo: m.tipo, horas: 0, receita: 0, combustivel: 0, manutencao: 0 }));
+
+  usos.forEach(u => {
+    const reg = porMaquina.get(u.maquina_id);
+    if (!reg) return;
+    const horas = Number(u.horas_trabalhadas ?? (u.horimetro_final - u.horimetro_inicial));
+    reg.horas += horas;
+    reg.receita += horas * Number(u.valor_hora || 120);
+  });
+  abastecimentos.forEach(a => { const reg = porMaquina.get(a.maquina_id); if (reg) reg.combustivel += Number(a.valor); });
+  manutencoes.forEach(m => { const reg = porMaquina.get(m.maquina_id); if (reg) reg.manutencao += Number(m.valor) || 0; });
+
+  const totalCombustivel = [...porMaquina.values()].reduce((s, r) => s + r.combustivel, 0);
+  const totalManutencao = [...porMaquina.values()].reduce((s, r) => s + r.manutencao, 0);
+  const totalReceita = [...porMaquina.values()].reduce((s, r) => s + r.receita, 0);
+
+  document.getElementById('metricasRelatorio').innerHTML = `
+    <div class="metric"><div class="micon bg-success"><i class="ti ti-cash"></i></div><div><div class="mlabel">Receita do mês</div><div class="mval">${formatarMoeda(totalReceita)}</div></div></div>
+    <div class="metric"><div class="micon bg-danger"><i class="ti ti-gas-station"></i></div><div><div class="mlabel">Abastecimento do mês</div><div class="mval">${formatarMoeda(totalCombustivel)}</div></div></div>
+    <div class="metric"><div class="micon bg-warning"><i class="ti ti-tool"></i></div><div><div class="mlabel">Manutenção do mês</div><div class="mval">${formatarMoeda(totalManutencao)}</div></div></div>
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-scale"></i></div><div><div class="mlabel">Saldo do mês</div><div class="mval">${formatarMoeda(totalReceita - totalCombustivel - totalManutencao)}</div></div></div>
+  `;
+
+  document.getElementById('blocosMaquinas').innerHTML = MAQUINAS.map(m => {
+    const reg = porMaquina.get(m.id);
+    const ultimaManutencao = todasManutencoes.find(x => x.maquina_id === m.id);
+    const ultimoUso = todosUsos.find(x => x.maquina_id === m.id);
+    let avisoManutencao = '';
+    if (ultimaManutencao && ultimaManutencao.horimetro_proxima && ultimoUso) {
+      const horimetroAtual = Number(ultimoUso.horimetro_final);
+      const faltam = Number(ultimaManutencao.horimetro_proxima) - horimetroAtual;
+      if (faltam <= 0) avisoManutencao = `<span class="badge bg-danger" style="margin-top:6px;display:inline-block">Manutenção atrasada</span>`;
+      else if (faltam <= 20) avisoManutencao = `<span class="badge bg-warning" style="margin-top:6px;display:inline-block">Faltam ${faltam.toFixed(0)}h p/ manutenção</span>`;
+    }
+    return `
+      <div class="maquina-bloco">
+        <div class="maquina-bloco-topo">
+          <div class="maquina-icone">${iconeMaquinaSvg(m.tipo)}</div>
+          <div><div class="maquina-nome">${m.nome}</div><div class="maquina-tipo">${m.tipo || ''}</div></div>
+        </div>
+        <div class="maquina-linha"><span>Horas trabalhadas</span><b>${reg.horas.toFixed(1)} h</b></div>
+        <div class="maquina-linha"><span>Receita</span><b style="color:var(--success)">${formatarMoeda(reg.receita)}</b></div>
+        <div class="maquina-linha"><span>Abastecimento</span><b style="color:var(--danger)">${formatarMoeda(reg.combustivel)}</b></div>
+        <div class="maquina-linha"><span>Manutenção</span><b style="color:var(--warning)">${formatarMoeda(reg.manutencao)}</b></div>
+        ${avisoManutencao}
+      </div>
+    `;
+  }).join('') || '<p style="color:var(--text-dim);font-size:13px">Nenhuma máquina cadastrada.</p>';
+
+  if (chartMaquinasInstance) chartMaquinasInstance.destroy();
+  const nomes = MAQUINAS.map(m => m.nome);
+  const corTexto = getComputedStyle(document.documentElement).getPropertyValue('--text-dim');
+  const corGrid = getComputedStyle(document.documentElement).getPropertyValue('--divider');
+  chartMaquinasInstance = new Chart(document.getElementById('chartMaquinas'), {
+    type: 'bar',
+    data: {
+      labels: nomes,
+      datasets: [
+        { label: 'Receita', backgroundColor: '#4dd4a0', data: MAQUINAS.map(m => porMaquina.get(m.id).receita) },
+        { label: 'Abastecimento', backgroundColor: '#f07070', data: MAQUINAS.map(m => porMaquina.get(m.id).combustivel) },
+        { label: 'Manutenção', backgroundColor: '#f0b840', data: MAQUINAS.map(m => porMaquina.get(m.id).manutencao) },
+      ],
+    },
+    options: {
+      plugins: { legend: { labels: { color: corTexto } } },
+      scales: {
+        x: { ticks: { color: corTexto }, grid: { color: corGrid } },
+        y: { ticks: { color: corTexto }, grid: { color: corGrid }, beginAtZero: true },
+      },
+    },
+  });
 }
 
 carregarBase();

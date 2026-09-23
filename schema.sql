@@ -137,16 +137,42 @@ create table uso_maquina (
   horimetro_inicial numeric not null,
   horimetro_final numeric not null,
   horas_trabalhadas numeric generated always as (horimetro_final - horimetro_inicial) stored,
-  abastecimento_litros numeric,
-  manutencao_descricao text,
-  manutencao_valor numeric,
   valor_hora numeric not null default 120,  -- config vigente na data do lançamento
   observacao text
+  -- abastecimento_litros, manutencao_descricao, manutencao_valor existiam aqui antes;
+  -- viraram as tabelas abastecimento_maquina e manutencao_maquina abaixo (telas próprias).
+  -- As colunas antigas continuam na tabela em produção (não puderam ser removidas por
+  -- classificador de permissão), mas não são mais lidas/gravadas pelo app.
 );
 
 alter table uso_maquina disable row level security;
 -- Faturamento mensal (receita Máquinas / despesa da empresa beneficiada) é uma VIEW calculada
 -- a partir de uso_maquina, não uma tabela de "acertos" digitada.
+
+create table abastecimento_maquina (
+  id bigserial primary key,
+  maquina_id int not null references maquinas(id),
+  data date not null,
+  litros numeric not null,
+  valor numeric not null,
+  observacao text
+);
+
+alter table abastecimento_maquina disable row level security;
+
+create table manutencao_maquina (
+  id bigserial primary key,
+  maquina_id int not null references maquinas(id),
+  data date not null,
+  horimetro numeric not null,
+  servico_realizado text,
+  prazo_horas numeric,        -- de quanto em quanto tempo (em horas) repete essa manutenção
+  horimetro_proxima numeric,  -- sugerido = horimetro + prazo_horas, editável
+  valor numeric,
+  observacao text
+);
+
+alter table manutencao_maquina disable row level security;
 
 -- ============================================================
 -- ACERTOS DE SAL / PASTO ENTRE FAZENDAS (intercompany fora do Lima Bank)
