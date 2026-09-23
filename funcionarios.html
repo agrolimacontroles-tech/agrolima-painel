@@ -102,12 +102,25 @@ document.getElementById('mainContent').innerHTML = `
 
   <div id="abaAtividades" style="display:none">
     <div class="pagehead">
-      <div class="pagetitle" style="font-size:16px">Programado x realizado, por dia</div>
+      <div class="pagetitle" style="font-size:16px">Programação Semanal</div>
       <input type="month" id="filtroMesAtividades">
     </div>
+    <div class="subtoggle" id="tabsSemanas"></div>
     <div class="card">
       <div class="cardb table-wrap">
-        <table class="grid-dias" id="tabelaGridAtividades"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+        <table class="grid-dias" id="tabelaSemanaAtividades"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+
+    <button class="btn btn-secondary" id="btnExpandirMesAtividades" onclick="alternarGradeMesAtividades()" style="margin-bottom:10px">
+      <i class="ti ti-chevron-down" id="iconeExpandirMesAtividades"></i> Ver grade do mês inteiro
+    </button>
+
+    <div id="blocoGradeMesAtividades" style="display:none">
+      <div class="card">
+        <div class="cardb table-wrap">
+          <table class="grid-dias" id="tabelaGridAtividades"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+        </div>
       </div>
     </div>
   </div>
@@ -189,7 +202,9 @@ async function carregarBase() {
 
   await carregarFuncionarios();
   await carregarListaDia();
-  await carregarGridAtividades();
+  semanaSelecionada = semanaDoDiaAtual();
+  renderTabsSemanas();
+  await carregarSemanaAtividades();
   await carregarFerias();
 
   const abaUrl = new URLSearchParams(location.search).get('aba');
@@ -405,7 +420,108 @@ async function editarObsDia(funcionarioId, data) {
 }
 
 // ---------- Programação semanal (atividades programadas x realizadas) ----------
-document.getElementById('filtroMesAtividades').addEventListener('change', carregarGridAtividades);
+const DIAS_SEMANA_ABREV = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+let semanaSelecionada = 1;
+
+document.getElementById('filtroMesAtividades').addEventListener('change', () => {
+  semanaSelecionada = semanaDoDiaAtual();
+  renderTabsSemanas();
+  carregarSemanaAtividades();
+  gradeMesAtividadesCarregada = false;
+  document.getElementById('blocoGradeMesAtividades').style.display = 'none';
+  document.getElementById('iconeExpandirMesAtividades').className = 'ti ti-chevron-down';
+});
+
+function computarSemanasDoMes() {
+  const mes = document.getElementById('filtroMesAtividades').value;
+  const [ano, mesNum] = mes.split('-').map(Number);
+  const ultimoDia = new Date(ano, mesNum, 0).getDate();
+  const semanas = [];
+  let diaInicio = 1;
+  let numero = 1;
+  while (diaInicio <= ultimoDia) {
+    const diaFim = Math.min(diaInicio + 6, ultimoDia);
+    semanas.push({ numero, diaInicio, diaFim });
+    diaInicio = diaFim + 1;
+    numero++;
+  }
+  return semanas;
+}
+
+function semanaDoDiaAtual() {
+  const mes = document.getElementById('filtroMesAtividades').value;
+  if (mes !== mesAtualISO()) return 1;
+  const hoje = new Date().getDate();
+  const semanas = computarSemanasDoMes();
+  const encontrada = semanas.find(s => hoje >= s.diaInicio && hoje <= s.diaFim);
+  return encontrada ? encontrada.numero : 1;
+}
+
+function renderTabsSemanas() {
+  const semanas = computarSemanasDoMes();
+  document.getElementById('tabsSemanas').innerHTML = semanas.map(s => `
+    <button class="stbtn ${s.numero === semanaSelecionada ? 'active' : ''}" onclick="selecionarSemana(${s.numero})">Semana ${s.numero}</button>
+  `).join('');
+}
+
+function selecionarSemana(numero) {
+  semanaSelecionada = numero;
+  renderTabsSemanas();
+  carregarSemanaAtividades();
+}
+
+function linhaAtividadeHtml(dia, dataISO, ano, mesNum, ativos, mapa) {
+  const diaSemanaIdx = new Date(ano, mesNum - 1, dia).getDay();
+  const fimDeSemana = diaSemanaIdx === 0 || diaSemanaIdx === 6;
+  let html = `<tr class="${fimDeSemana ? 'dia-fimdesemana' : ''}"><td>${String(dia).padStart(2, '0')} ${DIAS_SEMANA_ABREV[diaSemanaIdx]}</td>`;
+  ativos.forEach(f => {
+    const registro = mapa.get(`${f.id}_${dataISO}`);
+    const prog = registro ? (registro.atividades_programadas || '') : '';
+    const real = registro ? (registro.atividades_realizadas || '') : '';
+    html += `<td><input type="text" style="width:140px" value="${prog.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${f.id}, '${dataISO}', 'atividades_programadas', this.value)"></td>`;
+    html += `<td><input type="text" style="width:220px" value="${real.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${f.id}, '${dataISO}', 'atividades_realizadas', this.value)"></td>`;
+  });
+  html += '</tr>';
+  return html;
+}
+
+async function carregarSemanaAtividades() {
+  const mes = document.getElementById('filtroMesAtividades').value;
+  const [ano, mesNum] = mes.split('-').map(Number);
+  const semanas = computarSemanasDoMes();
+  const semana = semanas.find(s => s.numero === semanaSelecionada) || semanas[0];
+
+  const ativos = FUNCIONARIOS.filter(f => f.status !== 'demitido');
+  const dataInicioISO = `${mes}-${String(semana.diaInicio).padStart(2, '0')}`;
+  const dataFimISO = `${mes}-${String(semana.diaFim).padStart(2, '0')}`;
+
+  const { data: registros } = await supabaseClient.from('funcionario_atividades').select('*').gte('data', dataInicioISO).lte('data', dataFimISO);
+  const mapa = new Map((registros || []).map(r => [`${r.funcionario_id}_${r.data}`, r]));
+  window._mapaAtividades = mapa;
+
+  let html = '<thead><tr><th rowspan="2">Data</th>' + ativos.map(f => `<th colspan="2">${f.nome}</th>`).join('') + '</tr><tr>' +
+    ativos.map(() => '<th>Programada</th><th>Realizada</th>').join('') + '</tr></thead><tbody>';
+
+  for (let dia = semana.diaInicio; dia <= semana.diaFim; dia++) {
+    const dataISO = `${mes}-${String(dia).padStart(2, '0')}`;
+    html += linhaAtividadeHtml(dia, dataISO, ano, mesNum, ativos, mapa);
+  }
+  html += '</tbody>';
+  document.getElementById('tabelaSemanaAtividades').innerHTML = html;
+}
+
+let gradeMesAtividadesCarregada = false;
+async function alternarGradeMesAtividades() {
+  const bloco = document.getElementById('blocoGradeMesAtividades');
+  const icone = document.getElementById('iconeExpandirMesAtividades');
+  const abrindo = bloco.style.display === 'none';
+  bloco.style.display = abrindo ? '' : 'none';
+  icone.className = abrindo ? 'ti ti-chevron-up' : 'ti ti-chevron-down';
+  if (abrindo && !gradeMesAtividadesCarregada) {
+    gradeMesAtividadesCarregada = true;
+    await carregarGridAtividades();
+  }
+}
 
 async function carregarGridAtividades() {
   const mes = document.getElementById('filtroMesAtividades').value;
@@ -418,24 +534,12 @@ async function carregarGridAtividades() {
   const mapa = new Map(registros.map(r => [`${r.funcionario_id}_${r.data}`, r]));
   window._mapaAtividades = mapa;
 
-  const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
-
   let html = '<thead><tr><th rowspan="2">Data</th>' + ativos.map(f => `<th colspan="2">${f.nome}</th>`).join('') + '</tr><tr>' +
     ativos.map(() => '<th>Programada</th><th>Realizada</th>').join('') + '</tr></thead><tbody>';
 
   for (let dia = 1; dia <= ultimoDia; dia++) {
     const dataISO = `${mes}-${String(dia).padStart(2, '0')}`;
-    const diaSemanaIdx = new Date(ano, mesNum - 1, dia).getDay();
-    const fimDeSemana = diaSemanaIdx === 0 || diaSemanaIdx === 6;
-    html += `<tr class="${fimDeSemana ? 'dia-fimdesemana' : ''}"><td>${String(dia).padStart(2, '0')} ${diasSemana[diaSemanaIdx]}</td>`;
-    ativos.forEach(f => {
-      const registro = mapa.get(`${f.id}_${dataISO}`);
-      const prog = registro ? (registro.atividades_programadas || '') : '';
-      const real = registro ? (registro.atividades_realizadas || '') : '';
-      html += `<td><input type="text" style="width:140px" value="${prog.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${f.id}, '${dataISO}', 'atividades_programadas', this.value)"></td>`;
-      html += `<td><input type="text" style="width:220px" value="${real.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${f.id}, '${dataISO}', 'atividades_realizadas', this.value)"></td>`;
-    });
-    html += '</tr>';
+    html += linhaAtividadeHtml(dia, dataISO, ano, mesNum, ativos, mapa);
   }
   html += '</tbody>';
   document.getElementById('tabelaGridAtividades').innerHTML = html;
