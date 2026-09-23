@@ -128,7 +128,7 @@ document.getElementById('mainContent').innerHTML = `
       </div>
       <div class="card">
         <div class="cardb table-wrap">
-          <table class="grid-dias" id="tabelaGridDias"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
+          <table class="tabela-excel" id="tabelaGridDias"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
         </div>
       </div>
     </div>
@@ -422,16 +422,10 @@ async function carregarGridDias() {
       const chave = `${f.id}_${dataISO}`;
       const registro = mapaRegistros.get(chave);
       const status = registro ? registro.status : '';
-      const temObs = registro && registro.observacao;
+      const obs = registro && registro.observacao ? registro.observacao : '';
       const cor = STATUS_CORES[status];
       const estilo = cor ? `style="background:${cor.bg};color:${cor.fg}"` : '';
-      html += `<td>
-        <select ${estilo} onchange="salvarDiaTrabalhado(${f.id}, '${dataISO}', this.value)">
-          <option value="">—</option>
-          ${STATUS_OPCOES.map(s => `<option value="${s}" ${status === s ? 'selected' : ''}>${s}</option>`).join('')}
-        </select>
-        <button class="obs-btn ${temObs ? 'tem-obs' : ''}" title="Observação" onclick="editarObsDia(${f.id}, '${dataISO}')"><i class="ti ti-message-2"></i></button>
-      </td>`;
+      html += `<td ${estilo} ${obs ? `title="${obs.replace(/"/g, '&quot;')}"` : ''}>${status || '—'}</td>`;
     });
     html += '</tr>';
   }
