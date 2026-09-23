@@ -15,10 +15,9 @@
 .grid-dias select { font-size: 11px; padding: 2px 3px; border-radius: 4px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); font-weight: 500; }
 .dia-sabado td:first-child { background: var(--track-bg); font-weight: 600; }
 .dia-domingo td:first-child { background: var(--danger-bg); color: var(--danger); font-weight: 600; }
-.blocos-funcionarios { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-.bloco-funcionario { padding: 6px 14px; border-radius: 8px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text-muted); cursor: pointer; font-size: 13px; font-weight: 500; }
-.bloco-funcionario.selecionado { background: var(--accent-bg); color: #cfe5ff; border-color: transparent; }
-.nome-selecionado { font-size: 22px; font-weight: 600; color: var(--text); margin: 6px 0 14px; }
+.blocos-funcionarios { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.bloco-funcionario { padding: 7px 16px; border-radius: 999px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text-muted); cursor: pointer; font-size: 13px; font-weight: 500; transition: background 0.15s, color 0.15s; }
+.bloco-funcionario.selecionado { background: var(--accent-bg); color: #cfe5ff; border-color: transparent; font-weight: 600; }
 .obs-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 0 2px; vertical-align: middle; }
 .obs-btn.tem-obs { color: var(--info); }
 .legenda-status { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -27,6 +26,18 @@
 .dia-item:last-child { border-bottom: none; }
 .dia-item select { font-size: 12px; padding: 4px 6px; border-radius: 5px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); font-weight: 500; }
 .dia-item input[type="text"] { font-size: 12px; padding: 5px 8px; border-radius: 5px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); }
+
+.atividade-linha { display: flex; align-items: flex-start; gap: 14px; padding: 12px 10px; border-bottom: 0.5px solid var(--border); }
+.atividade-linha:last-child { border-bottom: none; }
+.atividade-linha.dia-domingo { background: var(--danger-bg); border-radius: 8px; margin: 2px 0; }
+.atividade-linha.dia-sabado { background: var(--track-bg); border-radius: 8px; margin: 2px 0; }
+.atividade-dia-label { width: 60px; flex-shrink: 0; font-weight: 600; font-size: 13px; padding-top: 10px; text-align: center; text-transform: capitalize; }
+.atividade-linha.dia-domingo .atividade-dia-label { color: var(--danger); }
+.atividade-campos { flex: 1; display: flex; gap: 14px; flex-wrap: wrap; }
+.atividade-campo { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 5px; }
+.atividade-campo label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+.atividade-campo input { width: 100%; padding: 9px 11px; font-size: 13px; border-radius: 7px; border: 0.5px solid var(--border); background: var(--bg-panel); color: var(--text); box-sizing: border-box; }
+.atividade-campo input:focus { outline: none; border-color: var(--accent-bg); }
 </style>
 </head>
 <body>
@@ -112,23 +123,20 @@ document.getElementById('mainContent').innerHTML = `
     </div>
     <div class="subtoggle" id="tabsSemanas"></div>
     <div class="blocos-funcionarios" id="blocosFuncionariosAtividades"></div>
-    <div class="nome-selecionado" id="nomeFuncionarioSelecionado"></div>
 
     <div class="card">
-      <div class="cardb table-wrap">
-        <table class="grid-dias" id="tabelaSemanaAtividades"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
-      </div>
+      <div class="cardh"><i class="ti ti-user"></i> <span id="nomeFuncionarioSelecionado"></span></div>
+      <div class="cardb" id="listaSemanaAtividades"><span class="spinner"></span></div>
     </div>
 
     <button class="btn btn-secondary" id="btnExpandirMesAtividades" onclick="alternarGradeMesAtividades()" style="margin-bottom:10px">
-      <i class="ti ti-chevron-down" id="iconeExpandirMesAtividades"></i> Ver grade do mês inteiro
+      <i class="ti ti-chevron-down" id="iconeExpandirMesAtividades"></i> Ver mês inteiro
     </button>
 
     <div id="blocoGradeMesAtividades" style="display:none">
       <div class="card">
-        <div class="cardb table-wrap">
-          <table class="grid-dias" id="tabelaGridAtividades"><tbody><tr class="empty-row"><td><span class="spinner"></span></td></tr></tbody></table>
-        </div>
+        <div class="cardh"><i class="ti ti-calendar"></i> Mês inteiro — <span id="nomeFuncionarioSelecionadoMes"></span></div>
+        <div class="cardb" id="listaGridAtividades"><span class="spinner"></span></div>
       </div>
     </div>
   </div>
@@ -492,6 +500,7 @@ function renderBlocosFuncionariosAtividades() {
 
   const selecionado = ativos.find(f => f.id === funcionarioSelecionadoAtividades);
   document.getElementById('nomeFuncionarioSelecionado').textContent = selecionado ? selecionado.nome : 'Nenhum funcionário selecionado';
+  document.getElementById('nomeFuncionarioSelecionadoMes').textContent = selecionado ? selecionado.nome : '—';
 }
 
 function selecionarFuncionarioAtividades(id) {
@@ -507,17 +516,26 @@ function linhaAtividadeHtml(dia, dataISO, ano, mesNum, funcionarioId, mapa) {
   const registro = mapa.get(`${funcionarioId}_${dataISO}`);
   const prog = registro ? (registro.atividades_programadas || '') : '';
   const real = registro ? (registro.atividades_realizadas || '') : '';
-  return `<tr class="${classeDia}">
-    <td>${String(dia).padStart(2, '0')} ${DIAS_SEMANA_ABREV[diaSemanaIdx]}</td>
-    <td><input type="text" style="width:280px" value="${prog.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${funcionarioId}, '${dataISO}', 'atividades_programadas', this.value)"></td>
-    <td><input type="text" style="width:340px" value="${real.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${funcionarioId}, '${dataISO}', 'atividades_realizadas', this.value)"></td>
-  </tr>`;
+  return `
+    <div class="atividade-linha ${classeDia}">
+      <div class="atividade-dia-label">${String(dia).padStart(2, '0')}<br>${DIAS_SEMANA_ABREV[diaSemanaIdx]}</div>
+      <div class="atividade-campos">
+        <div class="atividade-campo">
+          <label>Programada</label>
+          <input type="text" value="${prog.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${funcionarioId}, '${dataISO}', 'atividades_programadas', this.value)">
+        </div>
+        <div class="atividade-campo">
+          <label>Realizada</label>
+          <input type="text" value="${real.replace(/"/g, '&quot;')}" onblur="salvarAtividade(${funcionarioId}, '${dataISO}', 'atividades_realizadas', this.value)">
+        </div>
+      </div>
+    </div>`;
 }
 
 async function carregarSemanaAtividades() {
   renderBlocosFuncionariosAtividades();
   if (!funcionarioSelecionadoAtividades) {
-    document.getElementById('tabelaSemanaAtividades').innerHTML = '<tbody><tr class="empty-row"><td>Cadastre um funcionário primeiro.</td></tr></tbody>';
+    document.getElementById('listaSemanaAtividades').innerHTML = '<p style="color:var(--text-dim);font-size:13px">Cadastre um funcionário primeiro.</p>';
     return;
   }
 
@@ -533,13 +551,12 @@ async function carregarSemanaAtividades() {
   const mapa = new Map((registros || []).map(r => [`${r.funcionario_id}_${r.data}`, r]));
   window._mapaAtividades = mapa;
 
-  let html = '<thead><tr><th>Data</th><th>Programada</th><th>Realizada</th></tr></thead><tbody>';
+  let html = '';
   for (let dia = semana.diaInicio; dia <= semana.diaFim; dia++) {
     const dataISO = `${mes}-${String(dia).padStart(2, '0')}`;
     html += linhaAtividadeHtml(dia, dataISO, ano, mesNum, funcionarioSelecionadoAtividades, mapa);
   }
-  html += '</tbody>';
-  document.getElementById('tabelaSemanaAtividades').innerHTML = html;
+  document.getElementById('listaSemanaAtividades').innerHTML = html;
 }
 
 let gradeMesAtividadesCarregada = false;
@@ -557,7 +574,7 @@ async function alternarGradeMesAtividades() {
 
 async function carregarGridAtividades() {
   if (!funcionarioSelecionadoAtividades) {
-    document.getElementById('tabelaGridAtividades').innerHTML = '<tbody><tr class="empty-row"><td>Cadastre um funcionário primeiro.</td></tr></tbody>';
+    document.getElementById('listaGridAtividades').innerHTML = '<p style="color:var(--text-dim);font-size:13px">Cadastre um funcionário primeiro.</p>';
     return;
   }
 
@@ -569,13 +586,12 @@ async function carregarGridAtividades() {
   const mapa = new Map(registros.map(r => [`${r.funcionario_id}_${r.data}`, r]));
   window._mapaAtividades = mapa;
 
-  let html = '<thead><tr><th>Data</th><th>Programada</th><th>Realizada</th></tr></thead><tbody>';
+  let html = '';
   for (let dia = 1; dia <= ultimoDia; dia++) {
     const dataISO = `${mes}-${String(dia).padStart(2, '0')}`;
     html += linhaAtividadeHtml(dia, dataISO, ano, mesNum, funcionarioSelecionadoAtividades, mapa);
   }
-  html += '</tbody>';
-  document.getElementById('tabelaGridAtividades').innerHTML = html;
+  document.getElementById('listaGridAtividades').innerHTML = html;
 }
 
 async function salvarAtividade(funcionarioId, data, campo, valor) {
