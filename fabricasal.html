@@ -39,7 +39,7 @@ document.getElementById('mainContent').innerHTML = `
       <div class="cardb">
         <div class="frow cols-3">
           <div class="fgroup"><label>Produto</label><input type="text" id="qfProduto" placeholder="Sal de Transição..."></div>
-          <div class="fgroup"><label>Insumo</label><input type="text" id="qfInsumo" placeholder="Ureia, Calcário..."></div>
+          <div class="fgroup"><label>Insumo</label><select id="qfInsumo"></select></div>
           <div class="fgroup"><label>Quantidade por lote</label><input type="number" id="qfQuantidade" step="0.01"></div>
           <div class="fgroup"><label>Unidade</label><input type="text" id="qfUnidade" placeholder="kg, saco, %"></div>
         </div>
@@ -67,14 +67,24 @@ document.getElementById('mainContent').innerHTML = `
           <div class="fgroup"><label>Custo total</label><input type="number" id="qpCustoTotal" step="0.01"></div>
           <div class="fgroup full"><label>Observação</label><input type="text" id="qpObservacao"></div>
         </div>
-        <button class="btn btn-primary" id="btnAddProducao"><i class="ti ti-check"></i> Salvar produção</button>
+
+        <div style="margin-top:14px">
+          <label style="font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.3px">Insumos usados</label>
+          <div id="linhasInsumosProducao" style="margin-top:6px"></div>
+          <button class="btn btn-secondary" id="btnAddLinhaInsumo" style="margin-top:6px" type="button"><i class="ti ti-plus"></i> Adicionar insumo</button>
+        </div>
+
+        <div style="margin-top:14px">
+          <button class="btn btn-primary" id="btnAddProducao"><i class="ti ti-check"></i> Salvar produção</button>
+          <span id="msgProducao" class="msg" style="display:inline-block;margin-left:10px"></span>
+        </div>
       </div>
     </div>
     <div class="card">
       <div class="cardb table-wrap">
         <table>
-          <thead><tr><th>Data</th><th>Produto</th><th style="text-align:right">Lote (kg)</th><th style="text-align:right">Custo</th><th></th></tr></thead>
-          <tbody id="tbodyProducoes"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+          <thead><tr><th>Data</th><th>Produto</th><th style="text-align:right">Lote (kg)</th><th>Insumos usados</th><th style="text-align:right">Custo</th><th></th></tr></thead>
+          <tbody id="tbodyProducoes"><tr class="empty-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -162,10 +172,22 @@ document.getElementById('mainContent').innerHTML = `
 
   <div id="abaEstoque" style="display:none">
     <div class="card">
+      <div class="cardh"><i class="ti ti-flask"></i> Cadastrar insumo</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Nome</label><input type="text" id="fNomeInsumo" placeholder="Ureia, Calcário, Fubá..."></div>
+          <div class="fgroup"><label>Unidade</label><input type="text" id="fUnidadeInsumo" placeholder="kg, saco..."></div>
+          <div class="fgroup" style="justify-content:flex-end"><button class="btn btn-secondary" id="btnAddInsumo"><i class="ti ti-plus"></i> Adicionar</button></div>
+        </div>
+        <div id="listaInsumos" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="cardh"><i class="ti ti-plus"></i> Movimento de estoque</div>
       <div class="cardb">
         <div class="frow cols-3">
-          <div class="fgroup"><label>Insumo</label><input type="text" id="qeInsumo"></div>
+          <div class="fgroup"><label>Insumo</label><select id="qeInsumo"></select></div>
           <div class="fgroup"><label>Tipo</label><select id="qeTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
           <div class="fgroup"><label>Quantidade</label><input type="number" id="qeQuantidade" step="0.01"></div>
           <div class="fgroup"><label>Data</label><input type="date" id="qeData"></div>
@@ -204,6 +226,9 @@ function mostrarAba(aba) {
 
 let EMPRESAS = [];
 let FABRICA_SAL_ID = null;
+let INSUMOS = [];
+let ESTOQUE_MAP = new Map(); // insumo_id -> quantidade_atual
+let linhasInsumosProducao = []; // [{insumo_id, quantidade}]
 
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
 
@@ -222,6 +247,12 @@ async function carregarBase() {
 
   ['qpData', 'qvData', 'qeData', 'qcData', 'qmgData'].forEach(id => document.getElementById(id).value = hojeISO());
 
+  const { data: insumos } = await supabaseClient.from('sal_insumos').select('*').order('nome');
+  INSUMOS = insumos || [];
+  renderInsumos();
+
+  adicionarLinhaInsumo();
+
   carregarFormulas();
   carregarProducoes();
   carregarConsumo();
@@ -234,26 +265,52 @@ async function carregarBase() {
 }
 
 function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
+function nomeInsumo(id) { return (INSUMOS.find(i => i.id === id) || {}).nome || '—'; }
+
+// ---------- Insumos (cadastro) ----------
+document.getElementById('btnAddInsumo').addEventListener('click', async () => {
+  const nome = document.getElementById('fNomeInsumo').value.trim();
+  const unidade = document.getElementById('fUnidadeInsumo').value.trim() || null;
+  if (!nome) return;
+  await supabaseClient.from('sal_insumos').insert({ nome, unidade });
+  document.getElementById('fNomeInsumo').value = '';
+  document.getElementById('fUnidadeInsumo').value = '';
+  const { data } = await supabaseClient.from('sal_insumos').select('*').order('nome');
+  INSUMOS = data || [];
+  renderInsumos();
+});
+
+function renderInsumos() {
+  const opcoes = INSUMOS.map(i => `<option value="${i.id}">${i.nome}${i.unidade ? ' (' + i.unidade + ')' : ''}</option>`).join('') || '<option value="">Cadastre um insumo primeiro</option>';
+  document.getElementById('qfInsumo').innerHTML = opcoes;
+  document.getElementById('qeInsumo').innerHTML = opcoes;
+  document.getElementById('listaInsumos').innerHTML = INSUMOS.map(i => `<span class="badge bg-info">${i.nome}${i.unidade ? ' — ' + i.unidade : ''}</span>`).join('');
+  renderLinhasInsumosProducao();
+}
 
 // ---------- Fórmulas ----------
 document.getElementById('btnAddFormula').addEventListener('click', async () => {
   const produto = document.getElementById('qfProduto').value.trim();
-  const insumo = document.getElementById('qfInsumo').value.trim();
+  const insumo_id = Number(document.getElementById('qfInsumo').value);
   const quantidade_por_lote = parseFloat(document.getElementById('qfQuantidade').value);
   const unidade = document.getElementById('qfUnidade').value.trim();
-  if (!produto || !insumo || isNaN(quantidade_por_lote) || !unidade) return;
-  await supabaseClient.from('sal_formulas').insert({ produto, insumo, quantidade_por_lote, unidade });
-  ['qfProduto', 'qfInsumo', 'qfQuantidade', 'qfUnidade'].forEach(id => document.getElementById(id).value = '');
+  if (!produto || !insumo_id || isNaN(quantidade_por_lote) || !unidade) return;
+  await supabaseClient.from('sal_formulas').insert({ produto, insumo_id, quantidade_por_lote, unidade });
+  document.getElementById('qfProduto').value = '';
+  document.getElementById('qfQuantidade').value = '';
+  document.getElementById('qfUnidade').value = '';
   carregarFormulas();
 });
 
+let FORMULAS_CACHE = [];
 async function carregarFormulas() {
   const { data } = await supabaseClient.from('sal_formulas').select('*').order('produto');
-  document.getElementById('tbodyFormulas').innerHTML = (data || []).length === 0
+  FORMULAS_CACHE = data || [];
+  document.getElementById('tbodyFormulas').innerHTML = FORMULAS_CACHE.length === 0
     ? '<tr class="empty-row"><td colspan="5">Nenhuma fórmula cadastrada.</td></tr>'
-    : data.map(f => `
+    : FORMULAS_CACHE.map(f => `
       <tr>
-        <td>${f.produto}</td><td>${f.insumo}</td><td style="text-align:right">${f.quantidade_por_lote}</td><td>${f.unidade}</td>
+        <td>${f.produto}</td><td>${nomeInsumo(f.insumo_id)}</td><td style="text-align:right">${f.quantidade_por_lote}</td><td>${f.unidade}</td>
         <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirFormula(${f.id})"><i class="ti ti-trash"></i></button></td>
       </tr>
     `).join('');
@@ -261,33 +318,131 @@ async function carregarFormulas() {
 async function excluirFormula(id) { await supabaseClient.from('sal_formulas').delete().eq('id', id); carregarFormulas(); }
 
 // ---------- Produção ----------
+function renderLinhasInsumosProducao() {
+  document.getElementById('linhasInsumosProducao').innerHTML = linhasInsumosProducao.map((linha, idx) => `
+    <div class="frow cols-3" style="margin-bottom:6px">
+      <div class="fgroup">
+        <select onchange="linhasInsumosProducao[${idx}].insumo_id = Number(this.value)">
+          ${INSUMOS.length === 0 ? '<option value="">Cadastre um insumo primeiro</option>' :
+            INSUMOS.map(i => `<option value="${i.id}" ${i.id === linha.insumo_id ? 'selected' : ''}>${i.nome}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fgroup">
+        <input type="number" step="0.01" placeholder="Quantidade usada" value="${linha.quantidade || ''}" oninput="linhasInsumosProducao[${idx}].quantidade = parseFloat(this.value) || 0">
+      </div>
+      <div class="fgroup" style="justify-content:center">
+        <button class="btn btn-danger" type="button" style="padding:4px 10px" onclick="removerLinhaInsumo(${idx})"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>
+  `).join('') || '<p style="color:var(--text-dim);font-size:12px">Nenhum insumo adicionado ainda.</p>';
+}
+
+function adicionarLinhaInsumo(insumo_id, quantidade) {
+  linhasInsumosProducao.push({ insumo_id: insumo_id || (INSUMOS[0] ? INSUMOS[0].id : null), quantidade: quantidade || null });
+  renderLinhasInsumosProducao();
+}
+document.getElementById('btnAddLinhaInsumo').addEventListener('click', () => adicionarLinhaInsumo());
+
+function removerLinhaInsumo(idx) {
+  linhasInsumosProducao.splice(idx, 1);
+  renderLinhasInsumosProducao();
+}
+
+// sugere os insumos da fórmula cadastrada pro produto digitado (se existir)
+document.getElementById('qpProduto').addEventListener('blur', () => {
+  const produto = document.getElementById('qpProduto').value.trim();
+  const formulasDoProduto = FORMULAS_CACHE.filter(f => f.produto.toLowerCase() === produto.toLowerCase());
+  if (formulasDoProduto.length === 0) return;
+  linhasInsumosProducao = formulasDoProduto.map(f => ({ insumo_id: f.insumo_id, quantidade: f.quantidade_por_lote }));
+  renderLinhasInsumosProducao();
+});
+
 document.getElementById('btnAddProducao').addEventListener('click', async () => {
   const data = document.getElementById('qpData').value;
   const produto = document.getElementById('qpProduto').value.trim();
   const lote_kg = parseFloat(document.getElementById('qpLoteKg').value);
-  if (!data || !produto || isNaN(lote_kg)) return;
-  await supabaseClient.from('sal_producoes').insert({
+  const msg = document.getElementById('msgProducao');
+
+  if (!data || !produto || isNaN(lote_kg)) {
+    msg.textContent = 'Preencha data, produto e lote.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const linhasValidas = linhasInsumosProducao.filter(l => l.insumo_id && l.quantidade > 0);
+
+  const faltando = linhasValidas.filter(l => {
+    const atual = ESTOQUE_MAP.get(l.insumo_id) || 0;
+    return l.quantidade > atual;
+  });
+  if (faltando.length > 0) {
+    const texto = faltando.map(l => `${nomeInsumo(l.insumo_id)} (tem ${ESTOQUE_MAP.get(l.insumo_id) || 0}, precisa ${l.quantidade})`).join(', ');
+    if (!confirm(`Estoque insuficiente para: ${texto}. Salvar mesmo assim? (o estoque desses insumos vai ficar negativo)`)) return;
+  }
+
+  const { data: producao, error } = await supabaseClient.from('sal_producoes').insert({
     data, produto, lote_kg,
     custo_total: parseFloat(document.getElementById('qpCustoTotal').value) || null,
     observacao: document.getElementById('qpObservacao').value || null,
-  });
+  }).select().single();
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  for (const linha of linhasValidas) {
+    await supabaseClient.from('sal_producao_insumos').insert({ producao_id: producao.id, insumo_id: linha.insumo_id, quantidade_usada: linha.quantidade });
+    await supabaseClient.from('sal_estoque_movimentos').insert({ insumo_id: linha.insumo_id, tipo: 'saida', quantidade: linha.quantidade, data, producao_id: producao.id, observacao: `Baixa automática — produção de ${produto}` });
+    const atual = ESTOQUE_MAP.get(linha.insumo_id) || 0;
+    await supabaseClient.from('sal_estoque_insumos').upsert({ insumo_id: linha.insumo_id, quantidade_atual: atual - linha.quantidade });
+  }
+
+  msg.textContent = 'Produção salva! Estoque atualizado.';
+  msg.className = 'msg show success';
   ['qpProduto', 'qpLoteKg', 'qpCustoTotal', 'qpObservacao'].forEach(id => document.getElementById(id).value = '');
+  linhasInsumosProducao = [];
+  adicionarLinhaInsumo();
   carregarProducoes();
+  carregarEstoque();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 4000);
 });
 
+let PRODUCAO_INSUMOS_CACHE = new Map(); // producao_id -> [{insumo_id, quantidade_usada}]
 async function carregarProducoes() {
-  const data = await buscarPaginado(() => supabaseClient.from('sal_producoes').select('*').order('data', { ascending: false }));
+  const [data, insumosUsados] = await Promise.all([
+    buscarPaginado(() => supabaseClient.from('sal_producoes').select('*').order('data', { ascending: false })),
+    buscarPaginado(() => supabaseClient.from('sal_producao_insumos').select('*')),
+  ]);
+
+  PRODUCAO_INSUMOS_CACHE = new Map();
+  insumosUsados.forEach(i => {
+    if (!PRODUCAO_INSUMOS_CACHE.has(i.producao_id)) PRODUCAO_INSUMOS_CACHE.set(i.producao_id, []);
+    PRODUCAO_INSUMOS_CACHE.get(i.producao_id).push(i);
+  });
+
   document.getElementById('tbodyProducoes').innerHTML = data.length === 0
-    ? '<tr class="empty-row"><td colspan="5">Nenhuma produção registrada.</td></tr>'
-    : data.map(p => `
-      <tr>
-        <td>${new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${p.produto}</td>
-        <td style="text-align:right">${p.lote_kg}</td><td style="text-align:right">${formatarMoeda(p.custo_total)}</td>
-        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirProducao(${p.id})"><i class="ti ti-trash"></i></button></td>
-      </tr>
-    `).join('');
+    ? '<tr class="empty-row"><td colspan="6">Nenhuma produção registrada.</td></tr>'
+    : data.map(p => {
+      const insumos = PRODUCAO_INSUMOS_CACHE.get(p.id) || [];
+      const textoInsumos = insumos.length === 0 ? '—' : insumos.map(i => `${nomeInsumo(i.insumo_id)} (${i.quantidade_usada})`).join(', ');
+      return `
+        <tr>
+          <td>${new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${p.produto}</td>
+          <td style="text-align:right">${p.lote_kg}</td><td style="font-size:12px">${textoInsumos}</td><td style="text-align:right">${formatarMoeda(p.custo_total)}</td>
+          <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirProducao(${p.id})"><i class="ti ti-trash"></i></button></td>
+        </tr>
+      `;
+    }).join('');
 }
-async function excluirProducao(id) { await supabaseClient.from('sal_producoes').delete().eq('id', id); carregarProducoes(); }
+
+async function excluirProducao(id) {
+  if (!confirm('Excluir essa produção? Isso NÃO devolve os insumos ao estoque automaticamente.')) return;
+  await supabaseClient.from('sal_producao_insumos').delete().eq('producao_id', id);
+  await supabaseClient.from('sal_producoes').delete().eq('id', id);
+  carregarProducoes();
+}
 
 // ---------- Consumo por fazenda ----------
 document.getElementById('btnAddConsumo').addEventListener('click', async () => {
@@ -422,42 +577,41 @@ async function excluirVenda(id) { await supabaseClient.from('sal_vendas').delete
 
 // ---------- Estoque de insumos ----------
 document.getElementById('btnAddEstoque').addEventListener('click', async () => {
-  const insumo = document.getElementById('qeInsumo').value.trim();
+  const insumo_id = Number(document.getElementById('qeInsumo').value);
   const tipo = document.getElementById('qeTipo').value;
   const quantidade = parseFloat(document.getElementById('qeQuantidade').value);
   const data = document.getElementById('qeData').value;
-  if (!insumo || isNaN(quantidade) || !data) return;
+  if (!insumo_id || isNaN(quantidade) || !data) return;
 
-  await supabaseClient.from('sal_estoque_movimentos').insert({ insumo, tipo, quantidade, data, observacao: document.getElementById('qeObservacao').value || null });
+  await supabaseClient.from('sal_estoque_movimentos').insert({ insumo_id, tipo, quantidade, data, observacao: document.getElementById('qeObservacao').value || null });
 
-  const { data: existente } = await supabaseClient.from('sal_estoque_insumos').select('*').eq('insumo', insumo).maybeSingle();
+  const atual = ESTOQUE_MAP.get(insumo_id) || 0;
   const delta = tipo === 'entrada' ? quantidade : -quantidade;
-  if (existente) {
-    await supabaseClient.from('sal_estoque_insumos').update({ quantidade_atual: Number(existente.quantidade_atual) + delta }).eq('insumo', insumo);
-  } else {
-    await supabaseClient.from('sal_estoque_insumos').insert({ insumo, quantidade_atual: delta });
-  }
+  await supabaseClient.from('sal_estoque_insumos').upsert({ insumo_id, quantidade_atual: atual + delta });
 
-  ['qeInsumo', 'qeQuantidade', 'qeObservacao'].forEach(id => document.getElementById(id).value = '');
+  ['qeQuantidade', 'qeObservacao'].forEach(id => document.getElementById(id).value = '');
   carregarEstoque();
 });
 
 async function carregarEstoque() {
   const [{ data: atual }, movimentos] = await Promise.all([
-    supabaseClient.from('sal_estoque_insumos').select('*').order('insumo'),
+    supabaseClient.from('sal_estoque_insumos').select('*'),
     buscarPaginado(() => supabaseClient.from('sal_estoque_movimentos').select('*').order('data', { ascending: false })),
   ]);
 
-  document.getElementById('tbodyEstoqueAtual').innerHTML = (atual || []).length === 0
+  ESTOQUE_MAP = new Map((atual || []).map(a => [a.insumo_id, Number(a.quantidade_atual)]));
+
+  const linhasAtual = (atual || []).slice().sort((a, b) => nomeInsumo(a.insumo_id).localeCompare(nomeInsumo(b.insumo_id)));
+  document.getElementById('tbodyEstoqueAtual').innerHTML = linhasAtual.length === 0
     ? '<tr class="empty-row"><td colspan="2">Nenhum insumo registrado.</td></tr>'
-    : atual.map(a => `<tr><td>${a.insumo}</td><td style="text-align:right">${a.quantidade_atual}</td></tr>`).join('');
+    : linhasAtual.map(a => `<tr><td>${nomeInsumo(a.insumo_id)}</td><td style="text-align:right;${Number(a.quantidade_atual) < 0 ? 'color:var(--danger)' : ''}">${a.quantidade_atual}</td></tr>`).join('');
 
   document.getElementById('tbodyMovEstoque').innerHTML = movimentos.length === 0
     ? '<tr class="empty-row"><td colspan="4">Nenhum movimento registrado.</td></tr>'
     : movimentos.map(m => `
       <tr>
-        <td>${new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${m.insumo}</td>
-        <td>${m.tipo === 'entrada' ? '<span class="badge bg-success">Entrada</span>' : '<span class="badge bg-danger">Saída</span>'}</td>
+        <td>${new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${nomeInsumo(m.insumo_id)}</td>
+        <td>${m.tipo === 'entrada' ? '<span class="badge bg-success">Entrada</span>' : '<span class="badge bg-danger">Saída</span>'}${m.producao_id ? ' <span class="badge bg-info">auto</span>' : ''}</td>
         <td style="text-align:right">${m.quantidade}</td>
       </tr>
     `).join('');

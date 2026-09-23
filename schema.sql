@@ -241,10 +241,22 @@ alter table viagens disable row level security;
 -- ============================================================
 -- FÁBRICA DE SAL (produção)
 -- ============================================================
+
+-- Cadastro dos tipos de insumo (Ureia, Calcário, Fubá, ...). Existe pra que Fórmulas,
+-- Produção e Estoque sempre se refiram ao MESMO insumo (por id), nunca por texto livre
+-- digitado — evita erro de digitação quebrar a baixa automática de estoque.
+create table sal_insumos (
+  id serial primary key,
+  nome text not null unique,
+  unidade text
+);
+
+alter table sal_insumos disable row level security;
+
 create table sal_formulas (
   id serial primary key,
   produto text not null,              -- 'Sal de Transição', 'Adensado Águas', ...
-  insumo text not null,
+  insumo_id int not null references sal_insumos(id),
   quantidade_por_lote numeric not null,
   unidade text not null                -- 'kg' | 'saco' | '%'
 );
@@ -262,12 +274,14 @@ create table sal_producoes (
 
 alter table sal_producoes disable row level security;
 
+-- Insumos efetivamente usados numa produção (escolhidos por select, não digitados) —
+-- ao salvar a produção, cada linha aqui gera uma baixa automática em sal_estoque_movimentos
+-- e desconta de sal_estoque_insumos.
 create table sal_producao_insumos (
   id bigserial primary key,
   producao_id bigint not null references sal_producoes(id),
-  insumo text not null,
-  quantidade_usada numeric not null,
-  custo numeric
+  insumo_id int not null references sal_insumos(id),
+  quantidade_usada numeric not null
 );
 
 alter table sal_producao_insumos disable row level security;
@@ -284,8 +298,7 @@ create table sal_vendas (
 alter table sal_vendas disable row level security;
 
 create table sal_estoque_insumos (
-  id serial primary key,
-  insumo text not null unique,
+  insumo_id int primary key references sal_insumos(id),
   quantidade_atual numeric not null default 0
 );
 
@@ -293,10 +306,11 @@ alter table sal_estoque_insumos disable row level security;
 
 create table sal_estoque_movimentos (
   id bigserial primary key,
-  insumo text not null,
+  insumo_id int not null references sal_insumos(id),
   tipo text not null,                 -- 'entrada' | 'saida'
   quantidade numeric not null,
   data date not null,
+  producao_id bigint references sal_producoes(id),  -- preenchido quando a saída foi baixa automática de produção
   observacao text
 );
 
