@@ -24,6 +24,12 @@ document.getElementById('mainContent').innerHTML = `
     </div>
   </div>
 
+  <div class="subtoggle">
+    <button class="stbtn active" id="btnTabMes" onclick="mostrarAba('mes')">Contas do mês</button>
+    <button class="stbtn" id="btnTabFixas" onclick="mostrarAba('fixas')">Contas Fixas</button>
+  </div>
+
+  <div id="abaMes">
   <div class="card">
     <div class="cardh"><i class="ti ti-plus"></i> Nova conta</div>
     <div class="cardb">
@@ -88,11 +94,62 @@ document.getElementById('mainContent').innerHTML = `
       </table>
     </div>
   </div>
+  </div>
+
+  <div id="abaFixas" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Nova conta fixa</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Empresa</label><select id="xEmpresa"></select></div>
+          <div class="fgroup"><label>Prestador</label><input type="text" id="xPrestador"></div>
+          <div class="fgroup"><label>Dia de vencimento</label><input type="number" id="xDiaVencimento" min="1" max="31" placeholder="Ex: 10"></div>
+          <div class="fgroup"><label>Valor (deixe em branco se variar todo mês)</label><input type="number" id="xValor" step="0.01"></div>
+          <div class="fgroup"><label>Forma de pagamento</label><input type="text" id="xFormaPagamento" placeholder="Pix, boleto, débito automático..."></div>
+          <div class="fgroup"><label>Dados da conta / chave pix</label><input type="text" id="xDadosConta"></div>
+          <div class="fgroup full"><label>Motivo</label><input type="text" id="xMotivo"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="xObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarFixa"><i class="ti ti-check"></i> Salvar conta fixa</button>
+        <span id="msgFixa" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-repeat"></i> Gerar contas do mês</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Mês</label><input type="month" id="xMesGerar"></div>
+          <div class="fgroup" style="justify-content:flex-end"><button class="btn btn-secondary" id="btnGerarMes"><i class="ti ti-wand"></i> Gerar contas desse mês</button></div>
+        </div>
+        <span id="msgGerar" class="msg" style="display:inline-block"></span>
+        <p style="color:var(--text-dim);font-size:12px;margin-top:6px">Cria em "Contas do mês" uma conta pra cada fixa ativa, com o dia de vencimento certo. Se já foi gerada antes pra esse mês, não duplica. Contas com valor variável entram com valor R$ 0,00 — edite depois na aba "Contas do mês".</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-list"></i> Contas fixas cadastradas</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th style="text-align:right">Dia</th><th>Empresa</th><th>Prestador</th><th>Motivo</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr></thead>
+          <tbody id="tbodyFixas"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 `;
 
 let EMPRESAS = [];
 
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
+function mesAtualISO() { return new Date().toISOString().slice(0, 7); }
+
+function mostrarAba(aba) {
+  ['mes', 'fixas'].forEach(a => {
+    document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
+    document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
+  });
+}
 
 async function carregarBase() {
   await checkAuth();
@@ -104,6 +161,8 @@ async function carregarBase() {
   const opcoes = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('fEmpresa').innerHTML = opcoes;
   document.getElementById('filtroEmpresa').innerHTML = `<option value="">Todas as empresas</option>` + opcoes;
+  document.getElementById('xEmpresa').innerHTML = opcoes;
+  document.getElementById('xMesGerar').value = mesAtualISO();
 
   const empresaUrl = new URLSearchParams(location.search).get('empresa');
   if (empresaUrl && EMPRESAS.some(e => String(e.id) === empresaUrl)) {
@@ -112,6 +171,10 @@ async function carregarBase() {
   }
 
   carregarLista();
+  carregarFixas();
+
+  const abaUrl = new URLSearchParams(location.search).get('aba');
+  if (abaUrl) mostrarAba(abaUrl);
 }
 
 async function salvarConta() {
@@ -202,6 +265,119 @@ async function excluirConta(id) {
   await supabaseClient.from('contas_a_pagar').delete().eq('id', id);
   carregarLista();
 }
+
+// ---------- Contas fixas ----------
+document.getElementById('btnSalvarFixa').addEventListener('click', async () => {
+  const empresa_id = Number(document.getElementById('xEmpresa').value);
+  const prestador = document.getElementById('xPrestador').value.trim();
+  const dia_vencimento = parseInt(document.getElementById('xDiaVencimento').value);
+  const msg = document.getElementById('msgFixa');
+
+  if (!empresa_id || !prestador || !dia_vencimento || dia_vencimento < 1 || dia_vencimento > 31) {
+    msg.textContent = 'Preencha empresa, prestador e um dia de vencimento válido (1 a 31).';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const { error } = await supabaseClient.from('contas_fixas').insert({
+    empresa_id, prestador, dia_vencimento,
+    valor: parseFloat(document.getElementById('xValor').value) || null,
+    forma_pagamento: document.getElementById('xFormaPagamento').value || null,
+    dados_conta: document.getElementById('xDadosConta').value || null,
+    motivo: document.getElementById('xMotivo').value || null,
+    observacao: document.getElementById('xObservacao').value || null,
+  });
+
+  if (error) {
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  msg.textContent = 'Conta fixa salva!';
+  msg.className = 'msg show success';
+  ['xPrestador', 'xDiaVencimento', 'xValor', 'xFormaPagamento', 'xDadosConta', 'xMotivo', 'xObservacao'].forEach(id => document.getElementById(id).value = '');
+  carregarFixas();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+let FIXAS_CACHE = [];
+async function carregarFixas() {
+  const { data } = await supabaseClient.from('contas_fixas').select('*').order('dia_vencimento');
+  FIXAS_CACHE = data || [];
+
+  document.getElementById('tbodyFixas').innerHTML = FIXAS_CACHE.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhuma conta fixa cadastrada.</td></tr>'
+    : FIXAS_CACHE.map(f => `
+      <tr>
+        <td style="text-align:right">Dia ${f.dia_vencimento}</td>
+        <td>${nomeEmpresa(f.empresa_id)}</td>
+        <td>${f.prestador}</td>
+        <td>${f.motivo || '—'}</td>
+        <td style="text-align:right">${f.valor !== null ? formatarMoeda(f.valor) : '<i style="color:var(--text-dim)">variável</i>'}</td>
+        <td>${f.ativo ? '<span class="badge bg-success">Ativa</span>' : '<span class="badge bg-warning">Inativa</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-secondary" style="padding:4px 10px" title="${f.ativo ? 'Desativar' : 'Reativar'}" onclick="alternarAtivoFixa(${f.id}, ${!f.ativo})"><i class="ti ${f.ativo ? 'ti-player-pause' : 'ti-player-play'}"></i></button>
+          <button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirFixa(${f.id})"><i class="ti ti-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+}
+
+async function alternarAtivoFixa(id, novoAtivo) {
+  await supabaseClient.from('contas_fixas').update({ ativo: novoAtivo }).eq('id', id);
+  carregarFixas();
+}
+
+async function excluirFixa(id) {
+  if (!confirm('Excluir essa conta fixa? Contas já geradas a partir dela continuam em "Contas do mês".')) return;
+  await supabaseClient.from('contas_fixas').delete().eq('id', id);
+  carregarFixas();
+}
+
+document.getElementById('btnGerarMes').addEventListener('click', async () => {
+  const mes = document.getElementById('xMesGerar').value;
+  const msg = document.getElementById('msgGerar');
+  if (!mes) return;
+
+  const [ano, mesNum] = mes.split('-').map(Number);
+  const ultimoDiaMes = new Date(ano, mesNum, 0).getDate();
+
+  const fixasAtivas = FIXAS_CACHE.filter(f => f.ativo);
+  if (fixasAtivas.length === 0) {
+    msg.textContent = 'Nenhuma conta fixa ativa pra gerar.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const jaGeradas = await buscarPaginado(() => supabaseClient.from('contas_a_pagar').select('contas_fixas_id').gte('vencimento', `${mes}-01`).lte('vencimento', `${mes}-${String(ultimoDiaMes).padStart(2, '0')}`).not('contas_fixas_id', 'is', null));
+  const idsJaGerados = new Set(jaGeradas.map(j => j.contas_fixas_id));
+
+  const paraGerar = fixasAtivas.filter(f => !idsJaGerados.has(f.id));
+  if (paraGerar.length === 0) {
+    msg.textContent = 'Todas as contas fixas ativas já foram geradas pra esse mês.';
+    msg.className = 'msg show success';
+    return;
+  }
+
+  const novasContas = paraGerar.map(f => ({
+    empresa_id: f.empresa_id,
+    prestador: f.prestador,
+    forma_pagamento: f.forma_pagamento,
+    dados_conta: f.dados_conta,
+    valor: f.valor !== null ? f.valor : 0,
+    motivo: f.motivo,
+    vencimento: `${mes}-${String(Math.min(f.dia_vencimento, ultimoDiaMes)).padStart(2, '0')}`,
+    contas_fixas_id: f.id,
+    observacao: f.valor === null ? 'Valor variável — conferir e preencher.' : f.observacao,
+  }));
+
+  await supabaseClient.from('contas_a_pagar').insert(novasContas);
+
+  msg.textContent = `${novasContas.length} conta(s) gerada(s) pra ${mes}! ${idsJaGerados.size > 0 ? `(${idsJaGerados.size} já existiam)` : ''}`;
+  msg.className = 'msg show success';
+  carregarLista();
+});
 
 carregarBase();
 </script>

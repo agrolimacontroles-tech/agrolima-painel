@@ -69,6 +69,25 @@ alter table movimentos_lima_bank disable row level security;
 -- ============================================================
 -- CONTAS A PAGAR
 -- ============================================================
+
+-- Registro das contas que se repetem todo mês (mesmo fornecedor, mesmo dia de
+-- vencimento) — ex: CEMIG, contabilidade, consórcios. "Gerar contas do mês" em
+-- contaspagar.html cria as contas_a_pagar reais do mês a partir daqui.
+create table contas_fixas (
+  id serial primary key,
+  empresa_id int not null references empresas(id),
+  prestador text not null,
+  forma_pagamento text,
+  dados_conta text,
+  valor numeric,                -- null = variável, preencher a cada mês na hora de gerar
+  motivo text,
+  dia_vencimento int not null,  -- 1-31
+  ativo boolean not null default true,
+  observacao text
+);
+
+alter table contas_fixas disable row level security;
+
 create table contas_a_pagar (
   id bigserial primary key,
   empresa_id int not null references empresas(id),
@@ -80,7 +99,8 @@ create table contas_a_pagar (
   vencimento date not null,
   pago boolean not null default false,
   data_pagamento date,
-  observacao text
+  observacao text,
+  contas_fixas_id int references contas_fixas(id)  -- preenchido quando gerada a partir de uma conta fixa
 );
 
 alter table contas_a_pagar disable row level security;
