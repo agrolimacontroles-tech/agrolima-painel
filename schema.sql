@@ -83,6 +83,7 @@ create table contas_fixas (
   motivo text,
   dia_vencimento int not null,  -- 1-31
   ativo boolean not null default true,
+  conta_id int references contas(id),  -- plano de contas (despesa) — herdado pelas contas geradas
   observacao text
 );
 
@@ -100,7 +101,9 @@ create table contas_a_pagar (
   pago boolean not null default false,
   data_pagamento date,
   observacao text,
-  contas_fixas_id int references contas_fixas(id)  -- preenchido quando gerada a partir de uma conta fixa
+  contas_fixas_id int references contas_fixas(id),  -- preenchido quando gerada a partir de uma conta fixa
+  conta_id int references contas(id),               -- plano de contas (despesa) — usado pra gerar o lançamento ao pagar
+  lancamento_id bigint references lancamentos(id)    -- lançamento criado automaticamente quando marcada como paga
 );
 
 alter table contas_a_pagar disable row level security;

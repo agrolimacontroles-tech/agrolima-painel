@@ -39,6 +39,10 @@ document.getElementById('mainContent').innerHTML = `
           <select id="fEmpresa"></select>
         </div>
         <div class="fgroup">
+          <label>Conta (plano de contas)</label>
+          <select id="fConta"></select>
+        </div>
+        <div class="fgroup">
           <label>Prestador</label>
           <input type="text" id="fPrestador">
         </div>
@@ -102,6 +106,7 @@ document.getElementById('mainContent').innerHTML = `
       <div class="cardb">
         <div class="frow cols-3">
           <div class="fgroup"><label>Empresa</label><select id="xEmpresa"></select></div>
+          <div class="fgroup"><label>Conta (plano de contas)</label><select id="xConta"></select></div>
           <div class="fgroup"><label>Prestador</label><input type="text" id="xPrestador"></div>
           <div class="fgroup"><label>Dia de vencimento</label><input type="number" id="xDiaVencimento" min="1" max="31" placeholder="Ex: 10"></div>
           <div class="fgroup"><label>Valor (deixe em branco se variar todo mês)</label><input type="number" id="xValor" step="0.01"></div>
@@ -151,12 +156,18 @@ function mostrarAba(aba) {
   });
 }
 
+let CONTAS = [];
+
 async function carregarBase() {
   await checkAuth();
   showUserEmail();
 
-  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  const [{ data: empresas }, { data: contas }] = await Promise.all([
+    supabaseClient.from('empresas').select('id, nome').order('nome'),
+    supabaseClient.from('contas').select('id, empresa_id, tipo, codigo, nome').eq('tipo', 'despesa').order('codigo'),
+  ]);
   EMPRESAS = empresas || [];
+  CONTAS = contas || [];
 
   const opcoes = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('fEmpresa').innerHTML = opcoes;
@@ -164,10 +175,14 @@ async function carregarBase() {
   document.getElementById('xEmpresa').innerHTML = opcoes;
   document.getElementById('xMesGerar').value = mesAtualISO();
 
+  atualizarOpcoesConta('fEmpresa', 'fConta');
+  atualizarOpcoesConta('xEmpresa', 'xConta');
+
   const empresaUrl = new URLSearchParams(location.search).get('empresa');
   if (empresaUrl && EMPRESAS.some(e => String(e.id) === empresaUrl)) {
     document.getElementById('fEmpresa').value = empresaUrl;
     document.getElementById('filtroEmpresa').value = empresaUrl;
+    atualizarOpcoesConta('fEmpresa', 'fConta');
   }
 
   carregarLista();
@@ -177,15 +192,24 @@ async function carregarBase() {
   if (abaUrl) mostrarAba(abaUrl);
 }
 
+function atualizarOpcoesConta(idEmpresaSelect, idContaSelect) {
+  const empresaId = Number(document.getElementById(idEmpresaSelect).value);
+  const opcoes = CONTAS.filter(c => c.empresa_id === empresaId).map(c => `<option value="${c.id}">${c.codigo} — ${c.nome}</option>`).join('');
+  document.getElementById(idContaSelect).innerHTML = opcoes || '<option value="">Nenhuma conta de despesa cadastrada</option>';
+}
+document.getElementById('fEmpresa').addEventListener('change', () => atualizarOpcoesConta('fEmpresa', 'fConta'));
+document.getElementById('xEmpresa').addEventListener('change', () => atualizarOpcoesConta('xEmpresa', 'xConta'));
+
 async function salvarConta() {
   const empresa_id = Number(document.getElementById('fEmpresa').value);
+  const conta_id = Number(document.getElementById('fConta').value) || null;
   const prestador = document.getElementById('fPrestador').value.trim();
   const vencimento = document.getElementById('fVencimento').value;
   const valor = parseFloat(document.getElementById('fValor').value);
   const msg = document.getElementById('msgSalvar');
 
-  if (!empresa_id || !prestador || !vencimento || isNaN(valor)) {
-    msg.textContent = 'Preencha empresa, prestador, vencimento e valor.';
+  if (!empresa_id || !conta_id || !prestador || !vencimento || isNaN(valor)) {
+    msg.textContent = 'Preencha empresa, conta, prestador, vencimento e valor.';
     msg.className = 'msg show error';
     return;
   }
@@ -193,7 +217,7 @@ async function salvarConta() {
   const btn = document.getElementById('btnSalvar');
   btn.disabled = true;
   const { error } = await supabaseClient.from('contas_a_pagar').insert({
-    empresa_id, prestador, vencimento, valor,
+    empresa_id, conta_id, prestador, vencimento, valor,
     forma_pagamento: document.getElementById('fFormaPagamento').value || null,
     dados_conta: document.getElementById('fDadosConta').value || null,
     motivo: document.getElementById('fMotivo').value || null,
@@ -257,11 +281,39 @@ async function carregarLista() {
 }
 
 async function marcarPaga(id) {
-  await supabaseClient.from('contas_a_pagar').update({ pago: true, data_pagamento: hojeISO() }).eq('id', id);
+  const { data: conta } = await supabaseClient.from('contas_a_pagar').select('*').eq('id', id).single();
+
+  if (!conta.conta_id) {
+    if (!confirm('Essa conta não tem uma conta do plano de contas vinculada, então marcar como paga NÃO vai gerar lançamento no Fluxo de Caixa. Marcar como paga mesmo assim?')) return;
+    await supabaseClient.from('contas_a_pagar').update({ pago: true, data_pagamento: hojeISO() }).eq('id', id);
+    carregarLista();
+    return;
+  }
+
+  const { data: lancamento, error } = await supabaseClient.from('lancamentos').insert({
+    empresa_id: conta.empresa_id,
+    conta_id: conta.conta_id,
+    data: hojeISO(),
+    historico: conta.motivo || conta.prestador,
+    valor_total: conta.valor,
+    fornecedor_comprador: conta.prestador,
+    observacao: 'Gerado automaticamente ao marcar conta a pagar como paga.',
+  }).select().single();
+
+  if (error) {
+    alert('Erro ao gerar o lançamento: ' + error.message + '\nA conta não foi marcada como paga.');
+    return;
+  }
+
+  await supabaseClient.from('contas_a_pagar').update({ pago: true, data_pagamento: hojeISO(), lancamento_id: lancamento.id }).eq('id', id);
   carregarLista();
 }
 
 async function excluirConta(id) {
+  const { data: conta } = await supabaseClient.from('contas_a_pagar').select('lancamento_id').eq('id', id).single();
+  if (conta && conta.lancamento_id && confirm('Essa conta já gerou um lançamento no Fluxo de Caixa. Excluir esse lançamento também?')) {
+    await supabaseClient.from('lancamentos').delete().eq('id', conta.lancamento_id);
+  }
   await supabaseClient.from('contas_a_pagar').delete().eq('id', id);
   carregarLista();
 }
@@ -269,18 +321,19 @@ async function excluirConta(id) {
 // ---------- Contas fixas ----------
 document.getElementById('btnSalvarFixa').addEventListener('click', async () => {
   const empresa_id = Number(document.getElementById('xEmpresa').value);
+  const conta_id = Number(document.getElementById('xConta').value) || null;
   const prestador = document.getElementById('xPrestador').value.trim();
   const dia_vencimento = parseInt(document.getElementById('xDiaVencimento').value);
   const msg = document.getElementById('msgFixa');
 
-  if (!empresa_id || !prestador || !dia_vencimento || dia_vencimento < 1 || dia_vencimento > 31) {
-    msg.textContent = 'Preencha empresa, prestador e um dia de vencimento válido (1 a 31).';
+  if (!empresa_id || !conta_id || !prestador || !dia_vencimento || dia_vencimento < 1 || dia_vencimento > 31) {
+    msg.textContent = 'Preencha empresa, conta, prestador e um dia de vencimento válido (1 a 31).';
     msg.className = 'msg show error';
     return;
   }
 
   const { error } = await supabaseClient.from('contas_fixas').insert({
-    empresa_id, prestador, dia_vencimento,
+    empresa_id, conta_id, prestador, dia_vencimento,
     valor: parseFloat(document.getElementById('xValor').value) || null,
     forma_pagamento: document.getElementById('xFormaPagamento').value || null,
     dados_conta: document.getElementById('xDadosConta').value || null,
@@ -362,6 +415,7 @@ document.getElementById('btnGerarMes').addEventListener('click', async () => {
 
   const novasContas = paraGerar.map(f => ({
     empresa_id: f.empresa_id,
+    conta_id: f.conta_id,
     prestador: f.prestador,
     forma_pagamento: f.forma_pagamento,
     dados_conta: f.dados_conta,
