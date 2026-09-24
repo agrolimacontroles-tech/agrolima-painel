@@ -28,6 +28,11 @@ document.getElementById('mainContent').innerHTML = `
     <div class="metric"><span class="spinner"></span></div>
   </div>
 
+  <div id="cardAlertaManutencao" style="display:none" class="card">
+    <div class="cardh"><i class="ti ti-alert-triangle"></i> Manutenção de máquinas</div>
+    <div class="cardb" id="listaAlertaManutencao"></div>
+  </div>
+
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
     <div class="card">
       <div class="cardh"><i class="ti ti-building-bank"></i> Saldo do mês por empresa</div>
@@ -63,13 +68,18 @@ async function carregarPainel() {
   const em30dias = new Date(hoje.getTime() + 30 * 86400000).toISOString().slice(0, 10);
   const hojeISO = hoje.toISOString().slice(0, 10);
 
-  const [empresas, contas, lancamentosMes, contasPagar, parcelas] = await Promise.all([
+  const [empresas, contas, lancamentosMes, contasPagar, parcelas, maquinas, usosMaquina, manutencoes] = await Promise.all([
     supabaseClient.from('empresas').select('id, nome').order('nome').then(r => r.data || []),
     supabaseClient.from('contas').select('id, tipo').then(r => r.data || []),
     buscarPaginado(() => supabaseClient.from('lancamentos').select('empresa_id, conta_id, valor_total').gte('data', inicioMes).lte('data', fimMes)),
     supabaseClient.from('contas_a_pagar').select('empresa_id, prestador, valor, vencimento').eq('pago', false).gte('vencimento', hojeISO).lte('vencimento', em30dias).order('vencimento'),
     supabaseClient.from('financiamento_parcelas').select('vencimento, valor, financiamento_id, financiamentos(empresa_id, banco, descricao)').eq('pago', false).gte('vencimento', hojeISO).lte('vencimento', em30dias).order('vencimento'),
+    supabaseClient.from('maquinas').select('*').then(r => r.data || []),
+    buscarPaginado(() => supabaseClient.from('uso_maquina').select('maquina_id, data, horimetro_final').order('data', { ascending: false })),
+    buscarPaginado(() => supabaseClient.from('manutencao_maquina').select('maquina_id, data, horimetro_proxima').order('data', { ascending: false })),
   ]);
+
+  renderAlertaManutencao(maquinas, usosMaquina, manutencoes);
 
   const tipoPorConta = new Map(contas.map(c => [c.id, c.tipo]));
 
@@ -119,6 +129,37 @@ async function carregarPainel() {
         <td style="text-align:right">${formatarMoeda(v.valor)}</td>
       </tr>
     `).join('');
+}
+
+function renderAlertaManutencao(maquinas, usosMaquina, manutencoes) {
+  const LIMITE_AVISO_HORAS = 20;
+  const alertas = [];
+
+  maquinas.forEach(m => {
+    const ultimoUso = usosMaquina.find(u => u.maquina_id === m.id);
+    const ultimaManutencao = manutencoes.find(x => x.maquina_id === m.id);
+    if (!ultimoUso || !ultimaManutencao || !ultimaManutencao.horimetro_proxima) return;
+
+    const horimetroAtual = Number(ultimoUso.horimetro_final);
+    const faltam = Number(ultimaManutencao.horimetro_proxima) - horimetroAtual;
+
+    if (faltam <= 0) alertas.push({ nome: m.nome, texto: `Manutenção atrasada — passou ${Math.abs(faltam).toFixed(0)}h do previsto`, cor: 'var(--danger)' });
+    else if (faltam <= LIMITE_AVISO_HORAS) alertas.push({ nome: m.nome, texto: `Faltam ${faltam.toFixed(0)}h para a próxima manutenção`, cor: 'var(--warning)' });
+  });
+
+  const card = document.getElementById('cardAlertaManutencao');
+  if (alertas.length === 0) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = '';
+  document.getElementById('listaAlertaManutencao').innerHTML = alertas.map(a => `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border)">
+      <span><b>${a.nome}</b></span>
+      <span style="color:${a.cor}">${a.texto}</span>
+    </div>
+  `).join('');
 }
 
 carregarPainel();
