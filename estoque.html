@@ -22,12 +22,14 @@ document.getElementById('mainContent').innerHTML = `
       <div class="pagetitle">Estoque de vacinas / insumos veterinários</div>
       <div class="pagesub">Entradas e saídas de vacinas e medicamentos</div>
     </div>
+    <select id="filtroEmpresa"></select>
   </div>
 
   <div class="card">
     <div class="cardh"><i class="ti ti-plus"></i> Novo movimento</div>
     <div class="cardb">
       <div class="frow cols-3">
+        <div class="fgroup"><label>Empresa</label><select id="fEmpresa"></select></div>
         <div class="fgroup"><label>Produto</label><input type="text" id="fProduto"></div>
         <div class="fgroup"><label>Tipo</label><select id="fTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
         <div class="fgroup"><label>Quantidade</label><input type="number" id="fQuantidade" step="0.01"></div>
@@ -45,7 +47,7 @@ document.getElementById('mainContent').innerHTML = `
     <div class="cardh">Estoque atual</div>
     <div class="cardb table-wrap">
       <table>
-        <thead><tr><th>Produto</th><th style="text-align:right">Quantidade atual</th></tr></thead>
+        <thead><tr id="theadEstoqueAtual"><th>Produto</th><th style="text-align:right">Quantidade atual</th></tr></thead>
         <tbody id="tbodyEstoqueAtual"><tr class="empty-row"><td colspan="2"><span class="spinner"></span></td></tr></tbody>
       </table>
     </div>
@@ -55,31 +57,49 @@ document.getElementById('mainContent').innerHTML = `
     <div class="cardh">Movimentos</div>
     <div class="cardb table-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Produto</th><th>Tipo</th><th style="text-align:right">Quantidade</th><th>Observação</th></tr></thead>
+        <thead><tr id="theadMovimentos"><th>Data</th><th>Produto</th><th>Tipo</th><th style="text-align:right">Quantidade</th><th>Observação</th></tr></thead>
         <tbody id="tbodyMovimentos"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
       </table>
     </div>
   </div>
 `;
 
+let EMPRESAS = [];
+
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
+function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
 
 async function carregarBase() {
   await checkAuth();
   showUserEmail();
+
+  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  EMPRESAS = empresas || [];
+  const opcoes = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('fEmpresa').innerHTML = opcoes;
+  document.getElementById('filtroEmpresa').innerHTML = `<option value="">Todas as empresas</option>` + opcoes;
+
+  const empresaUrl = new URLSearchParams(location.search).get('empresa');
+  if (empresaUrl && EMPRESAS.some(e => String(e.id) === empresaUrl)) {
+    document.getElementById('fEmpresa').value = empresaUrl;
+    document.getElementById('filtroEmpresa').value = empresaUrl;
+  }
+
   document.getElementById('fData').value = hojeISO();
   carregarEstoque();
 }
+document.getElementById('filtroEmpresa').addEventListener('change', carregarEstoque);
 
 async function salvarMovimento() {
+  const empresa_id = Number(document.getElementById('fEmpresa').value) || null;
   const produto = document.getElementById('fProduto').value.trim();
   const tipo = document.getElementById('fTipo').value;
   const quantidade = parseFloat(document.getElementById('fQuantidade').value);
   const data = document.getElementById('fData').value;
   const msg = document.getElementById('msgSalvar');
 
-  if (!produto || isNaN(quantidade) || !data) {
-    msg.textContent = 'Preencha produto, quantidade e data.';
+  if (!empresa_id || !produto || isNaN(quantidade) || !data) {
+    msg.textContent = 'Preencha empresa, produto, quantidade e data.';
     msg.className = 'msg show error';
     return;
   }
@@ -87,14 +107,14 @@ async function salvarMovimento() {
   const btn = document.getElementById('btnSalvar');
   btn.disabled = true;
 
-  await supabaseClient.from('estoque_vacinas_movimentos').insert({ produto, tipo, quantidade, data, observacao: document.getElementById('fObservacao').value || null });
+  await supabaseClient.from('estoque_vacinas_movimentos').insert({ empresa_id, produto, tipo, quantidade, data, observacao: document.getElementById('fObservacao').value || null });
 
-  const { data: existente } = await supabaseClient.from('estoque_vacinas').select('*').eq('produto', produto).maybeSingle();
+  const { data: existente } = await supabaseClient.from('estoque_vacinas').select('*').eq('empresa_id', empresa_id).eq('produto', produto).maybeSingle();
   const delta = tipo === 'entrada' ? quantidade : -quantidade;
   if (existente) {
-    await supabaseClient.from('estoque_vacinas').update({ quantidade_atual: Number(existente.quantidade_atual) + delta }).eq('produto', produto);
+    await supabaseClient.from('estoque_vacinas').update({ quantidade_atual: Number(existente.quantidade_atual) + delta }).eq('id', existente.id);
   } else {
-    await supabaseClient.from('estoque_vacinas').insert({ produto, quantidade_atual: delta });
+    await supabaseClient.from('estoque_vacinas').insert({ empresa_id, produto, quantidade_atual: delta });
   }
 
   btn.disabled = false;
@@ -107,20 +127,41 @@ async function salvarMovimento() {
 document.getElementById('btnSalvar').addEventListener('click', salvarMovimento);
 
 async function carregarEstoque() {
-  const [{ data: atual }, movimentos] = await Promise.all([
-    supabaseClient.from('estoque_vacinas').select('*').order('produto'),
-    buscarPaginado(() => supabaseClient.from('estoque_vacinas_movimentos').select('*').order('data', { ascending: false })),
-  ]);
+  const empresaFiltro = document.getElementById('filtroEmpresa').value ? Number(document.getElementById('filtroEmpresa').value) : null;
+  const mostrarEmpresa = !empresaFiltro;
+
+  let qAtual = supabaseClient.from('estoque_vacinas').select('*').order('produto');
+  if (empresaFiltro) qAtual = qAtual.eq('empresa_id', empresaFiltro);
+  let qMov = () => {
+    let q = supabaseClient.from('estoque_vacinas_movimentos').select('*').order('data', { ascending: false });
+    if (empresaFiltro) q = q.eq('empresa_id', empresaFiltro);
+    return q;
+  };
+
+  const [{ data: atual }, movimentos] = await Promise.all([qAtual, buscarPaginado(qMov)]);
+
+  document.getElementById('theadEstoqueAtual').innerHTML = mostrarEmpresa
+    ? '<th>Empresa</th><th>Produto</th><th style="text-align:right">Quantidade atual</th>'
+    : '<th>Produto</th><th style="text-align:right">Quantidade atual</th>';
 
   document.getElementById('tbodyEstoqueAtual').innerHTML = (atual || []).length === 0
-    ? '<tr class="empty-row"><td colspan="2">Nenhum produto registrado.</td></tr>'
-    : atual.map(a => `<tr><td>${a.produto}</td><td style="text-align:right">${a.quantidade_atual}</td></tr>`).join('');
+    ? `<tr class="empty-row"><td colspan="${mostrarEmpresa ? 3 : 2}">Nenhum produto registrado.</td></tr>`
+    : atual.map(a => mostrarEmpresa
+      ? `<tr><td>${nomeEmpresa(a.empresa_id)}</td><td>${a.produto}</td><td style="text-align:right">${a.quantidade_atual}</td></tr>`
+      : `<tr><td>${a.produto}</td><td style="text-align:right">${a.quantidade_atual}</td></tr>`
+    ).join('');
+
+  document.getElementById('theadMovimentos').innerHTML = mostrarEmpresa
+    ? '<th>Data</th><th>Empresa</th><th>Produto</th><th>Tipo</th><th style="text-align:right">Quantidade</th><th>Observação</th>'
+    : '<th>Data</th><th>Produto</th><th>Tipo</th><th style="text-align:right">Quantidade</th><th>Observação</th>';
 
   document.getElementById('tbodyMovimentos').innerHTML = movimentos.length === 0
-    ? '<tr class="empty-row"><td colspan="5">Nenhum movimento registrado.</td></tr>'
+    ? `<tr class="empty-row"><td colspan="${mostrarEmpresa ? 6 : 5}">Nenhum movimento registrado.</td></tr>`
     : movimentos.map(m => `
       <tr>
-        <td>${new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${m.produto}</td>
+        <td>${new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        ${mostrarEmpresa ? `<td>${nomeEmpresa(m.empresa_id)}</td>` : ''}
+        <td>${m.produto}</td>
         <td>${m.tipo === 'entrada' ? '<span class="badge bg-success">Entrada</span>' : '<span class="badge bg-danger">Saída</span>'}</td>
         <td style="text-align:right">${m.quantidade}</td><td>${m.observacao || '—'}</td>
       </tr>

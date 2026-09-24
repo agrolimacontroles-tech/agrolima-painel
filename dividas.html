@@ -22,6 +22,7 @@ document.getElementById('mainContent').innerHTML = `
       <div class="pagetitle">Dívidas / Financiamentos</div>
       <div class="pagesub">Financiamentos bancários e a projeção de parcelas até a quitação</div>
     </div>
+    <select id="filtroEmpresa"></select>
   </div>
 
   <div class="card">
@@ -72,7 +73,7 @@ document.getElementById('mainContent').innerHTML = `
     <div class="cardh"><i class="ti ti-list"></i> Financiamentos cadastrados</div>
     <div class="cardb table-wrap">
       <table>
-        <thead><tr><th>Empresa</th><th>Banco</th><th>Descrição</th><th style="text-align:right">Valor total</th><th style="text-align:right">Parcela</th><th style="text-align:right">Saldo devedor</th><th></th></tr></thead>
+        <thead><tr id="theadFinanciamentos"><th>Empresa</th><th>Banco</th><th>Descrição</th><th style="text-align:right">Valor total</th><th style="text-align:right">Parcela</th><th style="text-align:right">Saldo devedor</th><th></th></tr></thead>
         <tbody id="tbodyFinanciamentos"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
       </table>
     </div>
@@ -99,10 +100,19 @@ async function carregarBase() {
 
   const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
   EMPRESAS = empresas || [];
-  document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  const opcoes = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('fEmpresa').innerHTML = opcoes;
+  document.getElementById('filtroEmpresa').innerHTML = `<option value="">Todas as empresas</option>` + opcoes;
+
+  const empresaUrl = new URLSearchParams(location.search).get('empresa');
+  if (empresaUrl && EMPRESAS.some(e => String(e.id) === empresaUrl)) {
+    document.getElementById('fEmpresa').value = empresaUrl;
+    document.getElementById('filtroEmpresa').value = empresaUrl;
+  }
 
   carregarLista();
 }
+document.getElementById('filtroEmpresa').addEventListener('change', carregarLista);
 
 // Tabela Price: parcela fixa com juros compostos
 function calcularParcelaPrice(valorTotal, taxaAnual, numeroParcelas) {
@@ -172,18 +182,26 @@ document.getElementById('btnSalvar').addEventListener('click', salvarFinanciamen
 function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome || '—'; }
 
 async function carregarLista() {
-  const { data: financiamentos } = await supabaseClient.from('financiamentos').select('*').order('data_contratacao', { ascending: false });
+  const empresaFiltro = document.getElementById('filtroEmpresa').value ? Number(document.getElementById('filtroEmpresa').value) : null;
+  const mostrarEmpresa = !empresaFiltro;
+
+  let q = supabaseClient.from('financiamentos').select('*').order('data_contratacao', { ascending: false });
+  if (empresaFiltro) q = q.eq('empresa_id', empresaFiltro);
+  const { data: financiamentos } = await q;
   const parcelasTodas = await buscarPaginado(() => supabaseClient.from('financiamento_parcelas').select('*'));
 
+  document.getElementById('theadFinanciamentos').innerHTML = (mostrarEmpresa ? '<th>Empresa</th>' : '') +
+    '<th>Banco</th><th>Descrição</th><th style="text-align:right">Valor total</th><th style="text-align:right">Parcela</th><th style="text-align:right">Saldo devedor</th><th></th>';
+
   document.getElementById('tbodyFinanciamentos').innerHTML = (financiamentos || []).length === 0
-    ? '<tr class="empty-row"><td colspan="7">Nenhum financiamento cadastrado.</td></tr>'
+    ? `<tr class="empty-row"><td colspan="${mostrarEmpresa ? 7 : 6}">Nenhum financiamento cadastrado.</td></tr>`
     : financiamentos.map(f => {
       const parcelasDele = parcelasTodas.filter(p => p.financiamento_id === f.id);
       const saldoDevedor = parcelasDele.filter(p => !p.pago).reduce((s, p) => s + Number(p.valor), 0);
       const valorParcela = parcelasDele.length ? parcelasDele[0].valor : 0;
       return `
         <tr>
-          <td>${nomeEmpresa(f.empresa_id)}</td>
+          ${mostrarEmpresa ? `<td>${nomeEmpresa(f.empresa_id)}</td>` : ''}
           <td>${f.banco}</td>
           <td>${f.descricao || '—'}</td>
           <td style="text-align:right">${formatarMoeda(f.valor_total)}</td>

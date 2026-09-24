@@ -356,14 +356,17 @@ alter table sal_estoque_movimentos disable row level security;
 -- ============================================================
 create table estoque_vacinas (
   id serial primary key,
-  produto text not null unique,
-  quantidade_atual numeric not null default 0
+  empresa_id int references empresas(id),
+  produto text not null,
+  quantidade_atual numeric not null default 0,
+  unique (empresa_id, produto)
 );
 
 alter table estoque_vacinas disable row level security;
 
 create table estoque_vacinas_movimentos (
   id bigserial primary key,
+  empresa_id int references empresas(id),
   produto text not null,
   tipo text not null,                 -- 'entrada' | 'saida'
   quantidade numeric not null,
