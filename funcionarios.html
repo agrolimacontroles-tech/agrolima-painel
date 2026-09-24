@@ -77,6 +77,7 @@ document.getElementById('mainContent').innerHTML = `
     <button class="stbtn" id="btnTabDias" onclick="mostrarAba('dias')">Dias Trabalhados</button>
     <button class="stbtn" id="btnTabAtividades" onclick="mostrarAba('atividades')">Programação Semanal</button>
     <button class="stbtn" id="btnTabFerias" onclick="mostrarAba('ferias')">Férias</button>
+    <button class="stbtn" id="btnTabFolha" onclick="mostrarAba('folha')">Folha de Pagamento</button>
   </div>
 
   <div id="abaFuncionarios">
@@ -185,6 +186,37 @@ document.getElementById('mainContent').innerHTML = `
       </div>
     </div>
   </div>
+
+  <div id="abaFolha" style="display:none">
+    <div class="pagehead">
+      <div class="pagetitle" style="font-size:16px">Folha de Pagamento</div>
+      <input type="month" id="filtroMesFolha">
+    </div>
+
+    <div id="blocosEmpresaFolha"></div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-cash"></i> Novo adiantamento</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Funcionário</label><select id="adFuncionario"></select></div>
+          <div class="fgroup"><label>Data</label><input type="date" id="adData"></div>
+          <div class="fgroup"><label>Valor</label><input type="number" id="adValor" step="0.01"></div>
+          <div class="fgroup"><label>Descrição</label><input type="text" id="adDescricao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnAddAdiantamento"><i class="ti ti-check"></i> Registrar adiantamento</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh"><i class="ti ti-list"></i> Adiantamentos</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Funcionário</th><th>Data</th><th style="text-align:right">Valor</th><th>Descrição</th><th>Situação</th><th></th></tr></thead>
+          <tbody id="tbodyAdiantamentos"><tr class="empty-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 `;
 
 // Cores extraídas da planilha real (SETEMBRO.xlsx, legenda "STATUS E CORES")
@@ -211,7 +243,7 @@ function renderLegendaStatus() {
 }
 
 function mostrarAba(aba) {
-  ['funcionarios', 'dias', 'atividades', 'ferias'].forEach(a => {
+  ['funcionarios', 'dias', 'atividades', 'ferias', 'folha'].forEach(a => {
     document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
     document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
   });
@@ -219,6 +251,9 @@ function mostrarAba(aba) {
 
 let EMPRESAS = [];
 let FUNCIONARIOS = [];
+let CONTAS_DESPESA = [];
+let FOLHA_ADIANTAMENTOS = [];
+let FOLHA_REGISTROS = [];
 
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
 function mesAtualISO() { return new Date().toISOString().slice(0, 7); }
@@ -227,13 +262,19 @@ async function carregarBase() {
   await checkAuth();
   showUserEmail();
 
-  const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
+  const [{ data: empresas }, { data: contas }] = await Promise.all([
+    supabaseClient.from('empresas').select('id, nome').order('nome'),
+    supabaseClient.from('contas').select('id, empresa_id, tipo, codigo, nome').eq('tipo', 'despesa').order('codigo'),
+  ]);
   EMPRESAS = empresas || [];
+  CONTAS_DESPESA = contas || [];
   document.getElementById('fEmpresa').innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('fDataAdmissao').value = hojeISO();
   document.getElementById('filtroDiaDias').value = hojeISO();
   document.getElementById('filtroMesDias').value = mesAtualISO();
   document.getElementById('filtroMesAtividades').value = mesAtualISO();
+  document.getElementById('filtroMesFolha').value = mesAtualISO();
+  document.getElementById('adData').value = hojeISO();
   renderLegendaStatus();
 
   await carregarFuncionarios();
@@ -242,6 +283,7 @@ async function carregarBase() {
   renderTabsSemanas();
   await carregarSemanaAtividades();
   await carregarFerias();
+  await carregarFolha();
 
   const abaUrl = new URLSearchParams(location.search).get('aba');
   if (abaUrl) mostrarAba(abaUrl);
@@ -699,6 +741,193 @@ async function marcarFeriasGozada(id) {
 async function excluirFerias(id) {
   await supabaseClient.from('funcionario_ferias').delete().eq('id', id);
   carregarFerias();
+}
+
+// ---------- Folha de Pagamento ----------
+document.getElementById('filtroMesFolha').addEventListener('change', carregarFolha);
+
+document.getElementById('btnAddAdiantamento').addEventListener('click', async () => {
+  const funcionario_id = Number(document.getElementById('adFuncionario').value);
+  const data = document.getElementById('adData').value;
+  const valor = parseFloat(document.getElementById('adValor').value);
+  if (!funcionario_id || !data || !valor) return;
+  await supabaseClient.from('funcionario_adiantamentos').insert({
+    funcionario_id, data, valor,
+    descricao: document.getElementById('adDescricao').value || null,
+  });
+  document.getElementById('adValor').value = '';
+  document.getElementById('adDescricao').value = '';
+  carregarFolha();
+});
+
+async function carregarFolha() {
+  const mes = document.getElementById('filtroMesFolha').value;
+  const [{ data: adiantamentos }, { data: registros }] = await Promise.all([
+    supabaseClient.from('funcionario_adiantamentos').select('*').order('data', { ascending: false }),
+    supabaseClient.from('folha_pagamento').select('*').eq('mes_referencia', mes),
+  ]);
+  FOLHA_ADIANTAMENTOS = adiantamentos || [];
+  FOLHA_REGISTROS = registros || [];
+
+  document.getElementById('adFuncionario').innerHTML = FUNCIONARIOS.filter(f => f.status !== 'demitido').map(f => `<option value="${f.id}">${f.nome}</option>`).join('');
+  renderTbodyAdiantamentos();
+  renderBlocosEmpresaFolha(mes);
+}
+
+function renderTbodyAdiantamentos() {
+  document.getElementById('tbodyAdiantamentos').innerHTML = FOLHA_ADIANTAMENTOS.length === 0
+    ? '<tr class="empty-row"><td colspan="6">Nenhum adiantamento registrado.</td></tr>'
+    : FOLHA_ADIANTAMENTOS.map(a => `
+      <tr>
+        <td>${nomeFuncionario(a.funcionario_id)}</td>
+        <td>${new Date(a.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td style="text-align:right">${formatarMoeda(a.valor)}</td>
+        <td>${a.descricao || '—'}</td>
+        <td><span class="badge ${a.situacao === 'descontado' ? 'bg-success' : 'bg-warning'}">${a.situacao}</span></td>
+        <td style="white-space:nowrap">
+          ${a.situacao !== 'descontado' ? `<button class="btn btn-secondary" style="padding:4px 10px" onclick="marcarAdiantamentoDescontado(${a.id})">Marcar descontado</button>` : ''}
+          <button class="btn btn-danger" style="padding:4px 10px" onclick="excluirAdiantamento(${a.id})"><i class="ti ti-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+}
+
+async function marcarAdiantamentoDescontado(id) {
+  await supabaseClient.from('funcionario_adiantamentos').update({ situacao: 'descontado' }).eq('id', id);
+  carregarFolha();
+}
+
+async function excluirAdiantamento(id) {
+  if (!confirm('Excluir esse adiantamento?')) return;
+  await supabaseClient.from('funcionario_adiantamentos').delete().eq('id', id);
+  carregarFolha();
+}
+
+function calcularLinhaFolha(f) {
+  const registro = FOLHA_REGISTROS.find(r => r.funcionario_id === f.id);
+  const descontosPendentes = FOLHA_ADIANTAMENTOS.filter(a => a.funcionario_id === f.id && a.situacao === 'pendente').reduce((s, a) => s + Number(a.valor), 0);
+  return {
+    salario: registro ? Number(registro.salario) : Number(f.salario || 0),
+    acrescimo: registro ? Number(registro.acrescimo) : 0,
+    horas: registro ? registro.horas : '',
+    descontos: registro ? Number(registro.descontos) : descontosPendentes,
+    valor_pago: registro ? Number(registro.valor_pago) : 0,
+    salvo: !!registro,
+  };
+}
+
+function primeiroDiaProximoMes(mes) {
+  const [ano, mesNum] = mes.split('-').map(Number);
+  return new Date(ano, mesNum, 1).toISOString().slice(0, 10);
+}
+
+function renderBlocosEmpresaFolha(mes) {
+  const ativos = FUNCIONARIOS.filter(f => f.status !== 'demitido');
+  const porEmpresa = new Map();
+  ativos.forEach(f => {
+    if (!porEmpresa.has(f.empresa_id)) porEmpresa.set(f.empresa_id, []);
+    porEmpresa.get(f.empresa_id).push(f);
+  });
+
+  let html = '';
+  for (const [empresaId, lista] of porEmpresa) {
+    const contasEmpresa = CONTAS_DESPESA.filter(c => c.empresa_id === empresaId);
+    const totalLiquidoSalvo = lista.reduce((s, f) => {
+      const r = FOLHA_REGISTROS.find(x => x.funcionario_id === f.id);
+      return s + (r ? Number(r.valor_liquido) : 0);
+    }, 0);
+    const faltam = lista.filter(f => !FOLHA_REGISTROS.find(r => r.funcionario_id === f.id)).length;
+
+    html += `
+      <div class="card">
+        <div class="cardh"><i class="ti ti-building"></i> ${nomeEmpresa(empresaId)}</div>
+        <div class="cardb table-wrap">
+          <table>
+            <thead><tr><th>Funcionário</th><th style="text-align:right">Salário</th><th style="text-align:right">Acréscimo</th><th style="text-align:right">Horas</th><th style="text-align:right">Descontos (adiant.)</th><th style="text-align:right">Líquido</th><th style="text-align:right">Valor pago</th><th style="text-align:right">Restante</th><th></th></tr></thead>
+            <tbody>
+              ${lista.map(f => {
+                const c = calcularLinhaFolha(f);
+                const liquido = c.salario + c.acrescimo - c.descontos;
+                const restante = liquido - c.valor_pago;
+                return `
+                  <tr>
+                    <td>${f.nome}${c.salvo ? ' <i class="ti ti-check" style="color:var(--success)" title="Salvo"></i>' : ''}</td>
+                    <td><input type="number" step="0.01" id="fp_salario_${f.id}" value="${c.salario}" style="width:100px" oninput="recalcularLinhaFolha(${f.id})"></td>
+                    <td><input type="number" step="0.01" id="fp_acrescimo_${f.id}" value="${c.acrescimo}" style="width:90px" oninput="recalcularLinhaFolha(${f.id})"></td>
+                    <td><input type="number" step="0.01" id="fp_horas_${f.id}" value="${c.horas ?? ''}" style="width:70px"></td>
+                    <td><input type="number" step="0.01" id="fp_descontos_${f.id}" value="${c.descontos}" style="width:90px" oninput="recalcularLinhaFolha(${f.id})"></td>
+                    <td style="text-align:right;font-weight:600" id="fp_liquido_${f.id}">${formatarMoeda(liquido)}</td>
+                    <td><input type="number" step="0.01" id="fp_pago_${f.id}" value="${c.valor_pago}" style="width:90px" oninput="recalcularLinhaFolha(${f.id})"></td>
+                    <td style="text-align:right" id="fp_restante_${f.id}">${formatarMoeda(restante)}</td>
+                    <td><button class="btn btn-primary" style="padding:4px 10px" onclick="salvarFolhaFuncionario(${f.id})"><i class="ti ti-check"></i></button></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);flex-wrap:wrap;gap:10px">
+            <div>
+              <b>Total da folha (salvo): ${formatarMoeda(totalLiquidoSalvo)}</b>
+              ${faltam > 0 ? `<span style="color:var(--warning);margin-left:8px">${faltam} funcionário(s) ainda não salvo(s) neste mês</span>` : ''}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select id="fp_conta_${empresaId}" style="min-width:200px">${contasEmpresa.map(c => `<option value="${c.id}">${c.codigo} — ${c.nome}</option>`).join('') || '<option value="">Nenhuma conta de despesa</option>'}</select>
+              <input type="date" id="fp_vencimento_${empresaId}" value="${primeiroDiaProximoMes(mes)}">
+              <button class="btn btn-secondary" onclick="gerarContaPagarFolha(${empresaId}, ${totalLiquidoSalvo})"><i class="ti ti-file-invoice"></i> Gerar conta a pagar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  document.getElementById('blocosEmpresaFolha').innerHTML = html || '<p style="color:var(--text-dim)">Nenhum funcionário ativo.</p>';
+}
+
+function recalcularLinhaFolha(funcionarioId) {
+  const salario = parseFloat(document.getElementById(`fp_salario_${funcionarioId}`).value) || 0;
+  const acrescimo = parseFloat(document.getElementById(`fp_acrescimo_${funcionarioId}`).value) || 0;
+  const descontos = parseFloat(document.getElementById(`fp_descontos_${funcionarioId}`).value) || 0;
+  const pago = parseFloat(document.getElementById(`fp_pago_${funcionarioId}`).value) || 0;
+  const liquido = salario + acrescimo - descontos;
+  document.getElementById(`fp_liquido_${funcionarioId}`).textContent = formatarMoeda(liquido);
+  document.getElementById(`fp_restante_${funcionarioId}`).textContent = formatarMoeda(liquido - pago);
+}
+
+async function salvarFolhaFuncionario(funcionarioId) {
+  const mes = document.getElementById('filtroMesFolha').value;
+  const salario = parseFloat(document.getElementById(`fp_salario_${funcionarioId}`).value) || 0;
+  const acrescimo = parseFloat(document.getElementById(`fp_acrescimo_${funcionarioId}`).value) || 0;
+  const horasVal = document.getElementById(`fp_horas_${funcionarioId}`).value;
+  const horas = horasVal ? parseFloat(horasVal) : null;
+  const descontos = parseFloat(document.getElementById(`fp_descontos_${funcionarioId}`).value) || 0;
+  const valor_pago = parseFloat(document.getElementById(`fp_pago_${funcionarioId}`).value) || 0;
+  const valor_liquido = salario + acrescimo - descontos;
+  const restante = valor_liquido - valor_pago;
+
+  await supabaseClient.from('folha_pagamento').upsert({
+    funcionario_id: funcionarioId, mes_referencia: mes,
+    salario, acrescimo, horas, descontos, valor_liquido, valor_pago, restante,
+  }, { onConflict: 'funcionario_id,mes_referencia' });
+
+  const pendentes = FOLHA_ADIANTAMENTOS.filter(a => a.funcionario_id === funcionarioId && a.situacao === 'pendente');
+  if (pendentes.length > 0) {
+    await supabaseClient.from('funcionario_adiantamentos').update({ situacao: 'descontado' }).in('id', pendentes.map(a => a.id));
+  }
+  carregarFolha();
+}
+
+async function gerarContaPagarFolha(empresaId, total) {
+  if (total <= 0) { alert('Nenhum valor de folha salvo para essa empresa ainda neste mês.'); return; }
+  const conta_id = Number(document.getElementById(`fp_conta_${empresaId}`).value) || null;
+  const vencimento = document.getElementById(`fp_vencimento_${empresaId}`).value;
+  const mes = document.getElementById('filtroMesFolha').value;
+  if (!confirm(`Gerar conta a pagar de ${formatarMoeda(total)} para ${nomeEmpresa(empresaId)}, vencimento ${new Date(vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}?`)) return;
+  const { error } = await supabaseClient.from('contas_a_pagar').insert({
+    empresa_id: empresaId, conta_id, prestador: 'Folha de pagamento — ' + nomeEmpresa(empresaId),
+    valor: total, vencimento, motivo: 'Folha de pagamento ' + mes,
+  });
+  if (error) { alert('Erro ao gerar conta a pagar: ' + error.message); return; }
+  alert('Conta a pagar gerada! Marque como paga em Contas a Pagar quando o pagamento sair, para gerar o lançamento no Fluxo de Caixa.');
 }
 
 carregarBase();

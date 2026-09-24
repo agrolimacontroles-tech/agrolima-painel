@@ -467,6 +467,33 @@ create table funcionario_ferias (
 
 alter table funcionario_ferias disable row level security;
 
+create table funcionario_adiantamentos (
+  id bigserial primary key,
+  funcionario_id int not null references funcionarios(id),
+  data date not null,
+  valor numeric not null,
+  descricao text,
+  situacao text not null default 'pendente'  -- 'pendente' | 'descontado'
+);
+
+alter table funcionario_adiantamentos disable row level security;
+
+create table folha_pagamento (
+  id bigserial primary key,
+  funcionario_id int not null references funcionarios(id),
+  mes_referencia text not null,  -- 'YYYY-MM'
+  salario numeric not null default 0,
+  acrescimo numeric not null default 0,
+  horas numeric,
+  descontos numeric not null default 0,   -- soma dos adiantamentos pendentes descontados nesse mês
+  valor_liquido numeric not null default 0,
+  valor_pago numeric not null default 0,  -- valor já pago (ex: adiantamento de folha)
+  restante numeric not null default 0,
+  unique (funcionario_id, mes_referencia)
+);
+
+alter table folha_pagamento disable row level security;
+
 create table funcionario_atividades (
   id bigserial primary key,
   funcionario_id int not null references funcionarios(id),
