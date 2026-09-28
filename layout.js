@@ -41,7 +41,7 @@ const GRUPOS_EMPRESA = [
   { empresaId: 4, nome: 'Confinamento',                    itens: ['fluxocaixa', 'dividas', 'estoque'] },
   { empresaId: 5, nome: 'Máquinas',                        itens: ['maquinas', 'fluxocaixa', 'dividas'] },
   { empresaId: 6, nome: 'Fábrica de Sal',                  itens: ['fabricasal', 'fluxocaixa', 'dividas', 'estoqueFabricaSal'] },
-  { empresaId: 7, nome: 'Pontual e Lima Agro Transportes', itens: ['fretes', 'fluxocaixa', 'dividas'] },
+  { empresaId: 7, nome: 'Pontual e Lima Agro Transportes', nomeExibicao: 'Pontual e Lima<br>Agro Transporte', itens: ['fretes', 'fluxocaixa', 'dividas'] },
   { empresaId: 8, nome: 'Lima Bank',                       itens: ['limabank', 'fluxocaixa', 'dividas'] },
 ];
 
@@ -91,7 +91,7 @@ function grupoEmpresaHtml(grupo, activePage, empresaUrlId) {
   const itensHtml = grupo.itens.map(k => itemEmpresaHtml(k, grupo.empresaId, activePage)).join('');
   return `
     <button class="sitem sgroup-toggle ${aberto ? 'open' : ''}" id="sgrupo-btn-${grupo.empresaId}" title="${grupo.nome}" onclick="toggleGrupoEmpresa(${grupo.empresaId})">
-      <i class="ti ti-building"></i><span>${grupo.nome}</span><i class="ti ti-chevron-right schevron"></i>
+      <i class="ti ti-building"></i><span>${grupo.nomeExibicao || grupo.nome}</span><i class="ti ti-chevron-right schevron"></i>
     </button>
     <div class="sgroup-children" id="sgrupo-${grupo.empresaId}" style="${aberto ? '' : 'display:none'}">${itensHtml}</div>
   `;
