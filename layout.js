@@ -11,35 +11,49 @@
 const MENU_ADMINISTRATIVO = [
   { page: 'painel',      label: 'Painel',        icon: 'ti-layout-dashboard' },
   { page: 'rotina',      label: 'Rotina',        icon: 'ti-checklist' },
-  { page: 'fluxocaixa',  label: 'Fluxo de Caixa', icon: 'ti-chart-line', href: () => 'fluxocaixa.html' },
   { page: 'lancamentos', label: 'Lançamentos',   icon: 'ti-cash-banknote' },
   { page: 'funcionarios', label: 'Funcionários', icon: 'ti-users' },
   { page: 'contaspagar', label: 'Contas a pagar', icon: 'ti-file-invoice' },
-  { page: 'limabank',    label: 'Lima Bank',     icon: 'ti-building-bank' },
-  { page: 'fretes',      label: 'Fretes',        icon: 'ti-truck' },
+  { page: 'fluxocaixa',  label: 'Fluxo Consolidado', icon: 'ti-chart-line', href: () => 'fluxocaixa.html' },
   { page: 'calculadora', label: 'Calculadora',   icon: 'ti-calculator' },
 ];
 
-// Itens que aparecem dentro de cada "quadrado" de empresa — cada um sabe montar seu próprio link filtrado
+// Itens que aparecem dentro de cada "quadrado" de empresa — cada um sabe montar seu próprio link filtrado.
+// Os "cd*" são o sistema real do Top Boi (CurralDigital, https://topboi.vercel.app — domínio/Supabase separados).
 const ITEM_DEFS_EMPRESA = {
+  terras:     { page: 'terras',    label: 'Terras',        icon: 'ti-map-2', href: () => 'terras.html' },
   maquinas:   { page: 'maquinas',   label: 'Máquinas',      icon: 'ti-tractor', href: () => 'maquinas.html' },
   fabricasal: { page: 'fabricasal', label: 'Fábrica de Sal', icon: 'ti-flask',   href: () => 'fabricasal.html' },
+  limabank:   { page: 'limabank',   label: 'Lima Bank',     icon: 'ti-building-bank', href: () => 'limabank.html' },
+  fretes:     { page: 'fretes',     label: 'Fretes',        icon: 'ti-truck', href: () => 'fretes.html' },
   fluxocaixa: { page: 'fluxocaixa', label: 'Fluxo de Caixa', icon: 'ti-chart-line', href: id => `fluxocaixa.html?empresa=${id}` },
   dividas:    { page: 'dividas',    label: 'Dívidas',       icon: 'ti-percentage', href: id => `dividas.html?empresa=${id}` },
   estoque:    { page: 'estoque',    label: 'Estoque',       icon: 'ti-package', href: id => `estoque.html?empresa=${id}` },
   estoqueFabricaSal: { page: 'fabricasal', label: 'Estoque', icon: 'ti-package', href: () => 'fabricasal.html?aba=estoque' },
+  cdPainel:     { label: 'Painel (CurralDigital)', icon: 'ti-layout-dashboard', external: true, href: () => 'https://topboi.vercel.app/painel.html' },
+  cdAnimais:    { label: 'Animais',    icon: 'ti-tag',           external: true, href: () => 'https://topboi.vercel.app/animais.html' },
+  cdLotes:      { label: 'Lotes',      icon: 'ti-stack-2',       external: true, href: () => 'https://topboi.vercel.app/lotes.html' },
+  cdMangas:     { label: 'Mangas',     icon: 'ti-fence',         external: true, href: () => 'https://topboi.vercel.app/mangas.html' },
+  cdCompras:    { label: 'Compras',    icon: 'ti-shopping-cart', external: true, href: () => 'https://topboi.vercel.app/compras.html' },
+  cdVendas:     { label: 'Vendas',     icon: 'ti-currency-dollar', external: true, href: () => 'https://topboi.vercel.app/vendas.html' },
+  cdRelatorios: { label: 'Relatórios', icon: 'ti-chart-bar',     external: true, href: () => 'https://topboi.vercel.app/relatorios.html' },
 };
 
 // Um "quadrado" por empresa — id real da tabela `empresas` (fixo, não muda)
 const GRUPOS_EMPRESA = [
-  { empresaId: 1, nome: 'Terras',                            itens: ['fluxocaixa', 'dividas', 'estoque'] },
-  { empresaId: 2, nome: 'Top Boi',                            itens: ['fluxocaixa', 'dividas', 'estoque'] },
-  { empresaId: 3, nome: 'Top Vacas',                          itens: ['fluxocaixa', 'dividas', 'estoque'] },
-  { empresaId: 4, nome: 'Confinamento',                       itens: ['fluxocaixa', 'dividas', 'estoque'] },
-  { empresaId: 5, nome: 'Máquinas',                           itens: ['maquinas', 'fluxocaixa', 'dividas', 'estoque'] },
-  { empresaId: 6, nome: 'Fábrica de Sal',                     itens: ['fabricasal', 'fluxocaixa', 'dividas', 'estoqueFabricaSal'] },
-  { empresaId: 7, nome: 'Pontual e Lima Agro Transportes',    itens: ['fluxocaixa', 'dividas', 'estoque'] },
+  { empresaId: 1, nome: 'Terras',                         itens: ['terras', 'fluxocaixa', 'dividas'] },
+  { empresaId: 2, nome: 'Top Boi',                         itens: ['cdPainel', 'cdAnimais', 'cdLotes', 'cdMangas', 'cdCompras', 'cdVendas', 'cdRelatorios', 'fluxocaixa', 'dividas', 'estoque'] },
+  { empresaId: 3, nome: 'Top Vacas',                       itens: ['fluxocaixa', 'dividas', 'estoque'] },
+  { empresaId: 4, nome: 'Confinamento',                    itens: ['fluxocaixa', 'dividas', 'estoque'] },
+  { empresaId: 5, nome: 'Máquinas',                        itens: ['maquinas', 'fluxocaixa', 'dividas'] },
+  { empresaId: 6, nome: 'Fábrica de Sal',                  itens: ['fabricasal', 'fluxocaixa', 'dividas', 'estoqueFabricaSal'] },
+  { empresaId: 7, nome: 'Pontual e Lima Agro Transportes', itens: ['fretes', 'fluxocaixa', 'dividas'] },
+  { empresaId: 8, nome: 'Lima Bank',                       itens: ['limabank', 'fluxocaixa', 'dividas'] },
 ];
+
+function iconeHtml(def) {
+  return def.img ? `<img src="${def.img}" class="sitem-icon-img" width="18" height="15">` : `<i class="ti ${def.icon}"></i>`;
+}
 
 function itemAdministrativoHtml(item, activePage) {
   const href = item.href ? item.href() : `${item.page}.html`;
@@ -47,7 +61,7 @@ function itemAdministrativoHtml(item, activePage) {
   const ativo = item.page === activePage && location.search === query;
   return `
     <button class="sitem ${ativo ? 'active' : ''}" title="${item.label}" onclick="location.href='${href}'">
-      <i class="ti ${item.icon}"></i><span>${item.label}</span>
+      ${iconeHtml(item)}<span>${item.label}</span>
     </button>
   `;
 }
@@ -56,18 +70,23 @@ function itemEmpresaHtml(key, empresaId, activePage) {
   const def = ITEM_DEFS_EMPRESA[key];
   const href = def.href(empresaId);
   const query = href.includes('?') ? href.slice(href.indexOf('?')) : '';
-  const ativo = def.page === activePage && location.search === query;
+  const ativo = !def.external && def.page === activePage && location.search === query;
+  const acao = def.external ? `window.open('${href}', '_blank')` : `location.href='${href}'`;
   return `
-    <button class="sitem ${ativo ? 'active' : ''}" title="${def.label}" onclick="location.href='${href}'">
-      <i class="ti ${def.icon}"></i><span>${def.label}</span>
+    <button class="sitem ${ativo ? 'active' : ''}" title="${def.label}" onclick="${acao}">
+      ${iconeHtml(def)}<span>${def.label}</span>${def.external ? '<i class="ti ti-external-link schevron" style="opacity:.6"></i>' : ''}
     </button>
   `;
 }
 
 function grupoDeveAbrir(grupo, activePage, empresaUrlId) {
-  if (grupo.itens.some(k => ['maquinas', 'fabricasal'].includes(k) && ITEM_DEFS_EMPRESA[k].page === activePage && !location.search)) return true;
+  for (const k of grupo.itens) {
+    const def = ITEM_DEFS_EMPRESA[k];
+    if (def.external || ['fluxocaixa', 'dividas', 'estoque', 'estoqueFabricaSal'].includes(k)) continue;
+    if (def.page === activePage && !location.search) return true;
+  }
   if (['fluxocaixa', 'dividas', 'estoque'].includes(activePage) && empresaUrlId && Number(empresaUrlId) === grupo.empresaId) return true;
-  if (activePage === 'fabricasal' && empresaUrlId === null && grupo.empresaId === 6 && location.search.includes('aba=estoque')) return true;
+  if (activePage === 'fabricasal' && grupo.empresaId === 6 && location.search.includes('aba=estoque')) return true;
   return false;
 }
 

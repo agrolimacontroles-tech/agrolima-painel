@@ -20,12 +20,11 @@ document.getElementById('mainContent').innerHTML = `
   <div class="pagehead">
     <div>
       <div class="pagetitle">Fluxo de Caixa</div>
-      <div class="pagesub">Mês a mês, passado (realizado) e futuro (previsto) — pra enxergar com antecedência onde vai apertar</div>
+      <div class="pagesub" id="pagesubFluxo">Mês a mês, passado (realizado) e futuro (previsto) — pra enxergar com antecedência onde vai apertar</div>
     </div>
-    <select id="filtroEmpresa" style="min-width:240px"></select>
   </div>
 
-  <div class="card">
+  <div class="card" id="cardSaldoInicial" style="display:none">
     <div class="cardh"><i class="ti ti-wallet"></i> Saldo inicial (ponto de partida do acumulado)</div>
     <div class="cardb">
       <div class="frow cols-3">
@@ -50,6 +49,7 @@ document.getElementById('mainContent').innerHTML = `
 `;
 
 let EMPRESAS = [];
+let EMPRESA_ATUAL = null; // null = consolidado (todas as empresas)
 const MESES_PASSADO = 3;
 const MESES_FUTURO = 12;
 
@@ -62,47 +62,35 @@ async function carregarBase() {
   const { data: empresas } = await supabaseClient.from('empresas').select('id, nome').order('nome');
   EMPRESAS = empresas || [];
 
-  document.getElementById('filtroEmpresa').innerHTML = `<option value="">Consolidado (todas as empresas)</option>` +
-    EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
-
   const empresaUrl = new URLSearchParams(location.search).get('empresa');
-  if (empresaUrl && EMPRESAS.some(e => String(e.id) === empresaUrl)) {
-    document.getElementById('filtroEmpresa').value = empresaUrl;
-  }
+  EMPRESA_ATUAL = (empresaUrl && EMPRESAS.some(e => String(e.id) === empresaUrl)) ? Number(empresaUrl) : null;
+
+  const empresaObj = EMPRESA_ATUAL ? EMPRESAS.find(e => e.id === EMPRESA_ATUAL) : null;
+  document.getElementById('pagesubFluxo').textContent = empresaObj
+    ? `${empresaObj.nome} — mês a mês, passado (realizado) e futuro (previsto)`
+    : 'Consolidado (todas as empresas) — mês a mês, passado (realizado) e futuro (previsto)';
+  document.getElementById('cardSaldoInicial').style.display = EMPRESA_ATUAL ? '' : 'none';
 
   document.getElementById('fSaldoData').value = hojeISO();
 
   await carregarSaldoInicial();
   await carregarFluxo();
 }
-document.getElementById('filtroEmpresa').addEventListener('change', async () => {
-  await carregarSaldoInicial();
-  await carregarFluxo();
-});
 
 async function carregarSaldoInicial() {
-  const empresaId = document.getElementById('filtroEmpresa').value;
-  if (!empresaId) {
-    document.getElementById('fSaldoValor').value = '';
-    document.getElementById('fSaldoValor').disabled = true;
-    document.getElementById('btnSalvarSaldo').disabled = true;
-    return;
-  }
-  document.getElementById('fSaldoValor').disabled = false;
-  document.getElementById('btnSalvarSaldo').disabled = false;
-  const { data } = await supabaseClient.from('saldo_inicial').select('*').eq('empresa_id', Number(empresaId)).maybeSingle();
+  if (!EMPRESA_ATUAL) return;
+  const { data } = await supabaseClient.from('saldo_inicial').select('*').eq('empresa_id', EMPRESA_ATUAL).maybeSingle();
   document.getElementById('fSaldoValor').value = data ? data.valor : 0;
   document.getElementById('fSaldoData').value = data ? data.data_referencia : hojeISO();
 }
 
 document.getElementById('btnSalvarSaldo').addEventListener('click', async () => {
-  const empresaId = Number(document.getElementById('filtroEmpresa').value);
   const valor = parseFloat(document.getElementById('fSaldoValor').value) || 0;
   const data_referencia = document.getElementById('fSaldoData').value;
   const msg = document.getElementById('msgSaldo');
-  if (!empresaId) return;
+  if (!EMPRESA_ATUAL) return;
 
-  const { error } = await supabaseClient.from('saldo_inicial').upsert({ empresa_id: empresaId, valor, data_referencia });
+  const { error } = await supabaseClient.from('saldo_inicial').upsert({ empresa_id: EMPRESA_ATUAL, valor, data_referencia });
   msg.textContent = error ? 'Erro ao salvar: ' + error.message : 'Saldo inicial salvo!';
   msg.className = error ? 'msg show error' : 'msg show success';
   carregarFluxo();
@@ -114,7 +102,7 @@ function mesLabel(ano, mes) {
 }
 
 async function carregarFluxo() {
-  const empresaIdFiltro = document.getElementById('filtroEmpresa').value ? Number(document.getElementById('filtroEmpresa').value) : null;
+  const empresaIdFiltro = EMPRESA_ATUAL;
 
   const hoje = new Date();
   const inicioJanela = new Date(hoje.getFullYear(), hoje.getMonth() - MESES_PASSADO, 1);

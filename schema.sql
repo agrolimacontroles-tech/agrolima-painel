@@ -470,6 +470,24 @@ create table funcionario_ferias (
 
 alter table funcionario_ferias disable row level security;
 
+-- ============================================================
+-- TERRAS — cadastro de fazendas (mesmo padrão de campos do CurralDigital)
+-- ============================================================
+create table terras_fazendas (
+  id serial primary key,
+  nome text not null,
+  proprietario text,
+  atividade text,
+  capacidade numeric,
+  area_total_ha numeric,
+  area_produtiva_ha numeric,
+  municipio text,
+  estado text,
+  observacao text
+);
+
+alter table terras_fazendas disable row level security;
+
 create table funcionario_adiantamentos (
   id bigserial primary key,
   funcionario_id int not null references funcionarios(id),
