@@ -30,19 +30,13 @@ const ITEM_DEFS_EMPRESA = {
   dividas:    { page: 'dividas',    label: 'Dívidas',       icon: 'ti-percentage', href: id => `dividas.html?empresa=${id}` },
   estoque:    { page: 'estoque',    label: 'Estoque',       icon: 'ti-package', href: id => `estoque.html?empresa=${id}` },
   estoqueFabricaSal: { page: 'fabricasal', label: 'Estoque', icon: 'ti-package', href: () => 'fabricasal.html?aba=estoque' },
-  cdPainel:     { label: 'Painel (CurralDigital)', icon: 'ti-layout-dashboard', external: true, href: () => 'https://topboi.vercel.app/painel.html' },
-  cdAnimais:    { label: 'Animais',    icon: 'ti-tag',           external: true, href: () => 'https://topboi.vercel.app/animais.html' },
-  cdLotes:      { label: 'Lotes',      icon: 'ti-stack-2',       external: true, href: () => 'https://topboi.vercel.app/lotes.html' },
-  cdMangas:     { label: 'Mangas',     icon: 'ti-fence',         external: true, href: () => 'https://topboi.vercel.app/mangas.html' },
-  cdCompras:    { label: 'Compras',    icon: 'ti-shopping-cart', external: true, href: () => 'https://topboi.vercel.app/compras.html' },
-  cdVendas:     { label: 'Vendas',     icon: 'ti-currency-dollar', external: true, href: () => 'https://topboi.vercel.app/vendas.html' },
-  cdRelatorios: { label: 'Relatórios', icon: 'ti-chart-bar',     external: true, href: () => 'https://topboi.vercel.app/relatorios.html' },
+  cdPainel:     { label: 'Painel', icon: 'ti-layout-dashboard', external: true, href: () => 'https://topboi.vercel.app/painel.html' },
 };
 
 // Um "quadrado" por empresa — id real da tabela `empresas` (fixo, não muda)
 const GRUPOS_EMPRESA = [
   { empresaId: 1, nome: 'Terras',                         itens: ['terras', 'fluxocaixa', 'dividas'] },
-  { empresaId: 2, nome: 'Top Boi',                         itens: ['cdPainel', 'cdAnimais', 'cdLotes', 'cdMangas', 'cdCompras', 'cdVendas', 'cdRelatorios', 'fluxocaixa', 'dividas', 'estoque'] },
+  { empresaId: 2, nome: 'Top Boi',                         itens: ['cdPainel', 'fluxocaixa', 'dividas', 'estoque'] },
   { empresaId: 3, nome: 'Top Vacas',                       itens: ['fluxocaixa', 'dividas', 'estoque'] },
   { empresaId: 4, nome: 'Confinamento',                    itens: ['fluxocaixa', 'dividas', 'estoque'] },
   { empresaId: 5, nome: 'Máquinas',                        itens: ['maquinas', 'fluxocaixa', 'dividas'] },
