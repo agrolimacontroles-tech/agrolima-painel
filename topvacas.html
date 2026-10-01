@@ -278,6 +278,9 @@ async function carregarBase() {
   renderReproducao();
   renderSanidade();
   renderNutricao();
+
+  const abaUrl = new URLSearchParams(location.search).get('aba');
+  if (abaUrl) mostrarAba(abaUrl);
 }
 
 function renderSelects() {
