@@ -22,6 +22,7 @@ document.getElementById('mainContent').innerHTML = `
       <div class="pagetitle">Fluxo de Caixa</div>
       <div class="pagesub" id="pagesubFluxo">Mês a mês, passado (realizado) e futuro (previsto) — pra enxergar com antecedência onde vai apertar</div>
     </div>
+    <div id="nomeEmpresaGrande" style="flex:1;text-align:center;font-size:22px;font-weight:600;color:var(--text)"></div>
   </div>
 
   <div class="card" id="cardSaldoInicial" style="display:none">
@@ -69,6 +70,7 @@ async function carregarBase() {
   document.getElementById('pagesubFluxo').textContent = empresaObj
     ? `${empresaObj.nome} — mês a mês, passado (realizado) e futuro (previsto)`
     : 'Consolidado (todas as empresas) — mês a mês, passado (realizado) e futuro (previsto)';
+  document.getElementById('nomeEmpresaGrande').textContent = empresaObj ? empresaObj.nome : '';
   document.getElementById('cardSaldoInicial').style.display = EMPRESA_ATUAL ? '' : 'none';
 
   document.getElementById('fSaldoData').value = hojeISO();
