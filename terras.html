@@ -27,6 +27,8 @@ document.getElementById('mainContent').innerHTML = `
   <div class="subtoggle">
     <button class="stbtn active" id="btnTabLista" onclick="mostrarAba('lista')">Lista de fazendas</button>
     <button class="stbtn" id="btnTabCadastro" onclick="mostrarAba('cadastro')">Cadastrar fazenda</button>
+    <button class="stbtn" id="btnTabOcupacao" onclick="mostrarAba('ocupacao')">Ocupação</button>
+    <button class="stbtn" id="btnTabFaturamento" onclick="mostrarAba('faturamento')">Faturamento por Pasto</button>
   </div>
 
   <div id="abaLista">
@@ -81,16 +83,98 @@ document.getElementById('mainContent').innerHTML = `
       </div>
     </div>
   </div>
+
+  <div id="abaOcupacao" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-chart-pie"></i> Ocupação por fazenda</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Fazenda</th><th style="text-align:right">Capacidade</th><th style="text-align:right">Ocupação atual</th><th style="text-align:right">% ocupado</th></tr></thead>
+          <tbody id="tbodyOcupacaoResumo"><tr class="empty-row"><td colspan="4"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Nova ocupação</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Fazenda</label><select id="oFazenda"></select></div>
+          <div class="fgroup"><label>Ocupante</label><input type="text" id="oOcupante" placeholder="Top Boi, Confinamento..."></div>
+          <div class="fgroup"><label>Quantidade de cabeças</label><input type="number" id="oQuantidade" step="1"></div>
+          <div class="fgroup"><label>Data de início</label><input type="date" id="oDataInicio"></div>
+          <div class="fgroup"><label>Valor mensal (pasto)</label><input type="number" id="oValorMensal" step="0.01"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="oObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarOcupacao"><i class="ti ti-check"></i> Registrar ocupação</button>
+        <span id="msgOcupacao" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh">Ocupações</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Fazenda</th><th>Ocupante</th><th style="text-align:right">Cabeças</th><th>Início</th><th>Fim</th><th style="text-align:right">Valor mensal</th><th></th></tr></thead>
+          <tbody id="tbodyOcupacoes"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaFaturamento" style="display:none">
+    <div class="metrics" id="metricasFaturamento"><div class="metric"><span class="spinner"></span></div></div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Novo faturamento de pasto</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Fazenda</label><select id="pFazenda" onchange="atualizarOpcoesOcupacao()"></select></div>
+          <div class="fgroup"><label>Ocupação (opcional)</label><select id="pOcupacao"><option value="">—</option></select></div>
+          <div class="fgroup"><label>Data</label><input type="date" id="pData"></div>
+          <div class="fgroup"><label>Valor</label><input type="number" id="pValor" step="0.01"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="pObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarFaturamento"><i class="ti ti-check"></i> Registrar (gera lançamento de receita)</button>
+        <span id="msgFaturamento" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh">Faturamento por fazenda</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Fazenda</th><th style="text-align:right">Total faturado</th></tr></thead>
+          <tbody id="tbodyFaturamentoPorFazenda"><tr class="empty-row"><td colspan="2"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh">Histórico</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Fazenda</th><th>Ocupante</th><th style="text-align:right">Valor</th><th>Observação</th></tr></thead>
+          <tbody id="tbodyFaturamentos"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 `;
 
 let fazendaEditandoId = null;
+let OCUPACOES = [], FATURAMENTOS = [], CONTA_PASTO_ID = null;
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
 
 function mostrarAba(aba) {
-  document.getElementById('abaLista').style.display = aba === 'lista' ? '' : 'none';
-  document.getElementById('abaCadastro').style.display = aba === 'cadastro' ? '' : 'none';
-  document.getElementById('btnTabLista').classList.toggle('active', aba === 'lista');
-  document.getElementById('btnTabCadastro').classList.toggle('active', aba === 'cadastro');
+  ['lista', 'cadastro', 'ocupacao', 'faturamento'].forEach(a => {
+    document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
+    document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
+  });
   if (aba === 'lista') carregarFazendas();
+  if (aba === 'ocupacao') carregarOcupacoes();
+  if (aba === 'faturamento') carregarFaturamentos();
 }
 
 function limparFormulario() {
@@ -108,6 +192,10 @@ async function carregarFazendas() {
   }
   window._fazendas = fazendas || [];
   document.getElementById('totalFazendas').textContent = `${fazendas.length} fazenda${fazendas.length === 1 ? '' : 's'} cadastrada${fazendas.length === 1 ? '' : 's'}`;
+
+  const opcoesFazenda = fazendas.map(f => `<option value="${f.id}">${f.nome}</option>`).join('');
+  document.getElementById('oFazenda').innerHTML = opcoesFazenda || '<option value="">Cadastre uma fazenda primeiro</option>';
+  document.getElementById('pFazenda').innerHTML = opcoesFazenda || '<option value="">Cadastre uma fazenda primeiro</option>';
 
   document.getElementById('tbodyFazendas').innerHTML = fazendas.length === 0
     ? '<tr class="empty-row"><td colspan="8">Nenhuma fazenda cadastrada ainda.</td></tr>'
@@ -193,10 +281,172 @@ async function salvarFazenda() {
 }
 document.getElementById('btnSalvarFazenda').addEventListener('click', salvarFazenda);
 
+// ---------- Ocupação das fazendas ----------
+function nomeFazenda(id) { return (window._fazendas || []).find(f => f.id === id)?.nome || '—'; }
+
+document.getElementById('oDataInicio').value = hojeISO();
+
+document.getElementById('btnSalvarOcupacao').addEventListener('click', async () => {
+  const fazenda_id = Number(document.getElementById('oFazenda').value);
+  const ocupante = document.getElementById('oOcupante').value.trim();
+  const quantidade_cabecas = parseInt(document.getElementById('oQuantidade').value);
+  const msg = document.getElementById('msgOcupacao');
+  if (!fazenda_id || !ocupante || !quantidade_cabecas) {
+    msg.textContent = 'Preencha fazenda, ocupante e quantidade de cabeças.';
+    msg.className = 'msg show error';
+    return;
+  }
+  const { error } = await supabaseClient.from('terras_ocupacoes').insert({
+    fazenda_id, ocupante, quantidade_cabecas,
+    data_inicio: document.getElementById('oDataInicio').value,
+    valor_mensal: parseFloat(document.getElementById('oValorMensal').value) || null,
+    observacao: document.getElementById('oObservacao').value.trim() || null,
+  });
+  if (error) { msg.textContent = 'Erro: ' + error.message; msg.className = 'msg show error'; return; }
+  msg.textContent = 'Ocupação registrada!'; msg.className = 'msg show success';
+  ['oOcupante', 'oQuantidade', 'oValorMensal', 'oObservacao'].forEach(id => document.getElementById(id).value = '');
+  await carregarOcupacoes();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+async function encerrarOcupacao(id) {
+  if (!confirm('Encerrar essa ocupação hoje?')) return;
+  await supabaseClient.from('terras_ocupacoes').update({ data_fim: hojeISO() }).eq('id', id);
+  await carregarOcupacoes();
+}
+
+async function carregarOcupacoes() {
+  const { data } = await supabaseClient.from('terras_ocupacoes').select('*').order('data_inicio', { ascending: false });
+  OCUPACOES = data || [];
+
+  const hoje = hojeISO();
+  const resumo = (window._fazendas || []).map(f => {
+    const ativas = OCUPACOES.filter(o => o.fazenda_id === f.id && (!o.data_fim || o.data_fim >= hoje));
+    const ocupacaoAtual = ativas.reduce((s, o) => s + o.quantidade_cabecas, 0);
+    const pct = f.capacidade ? (ocupacaoAtual / f.capacidade * 100) : null;
+    return { fazenda: f, ocupacaoAtual, pct };
+  });
+
+  document.getElementById('tbodyOcupacaoResumo').innerHTML = resumo.length === 0
+    ? '<tr class="empty-row"><td colspan="4">Nenhuma fazenda cadastrada ainda.</td></tr>'
+    : resumo.map(r => `
+      <tr>
+        <td><b>${r.fazenda.nome}</b></td>
+        <td style="text-align:right">${r.fazenda.capacidade ?? '—'}</td>
+        <td style="text-align:right">${r.ocupacaoAtual}</td>
+        <td style="text-align:right;color:${r.pct !== null && r.pct >= 100 ? 'var(--danger)' : r.pct !== null && r.pct >= 80 ? 'var(--warning)' : 'var(--text)'}">${r.pct !== null ? r.pct.toFixed(0) + '%' : '—'}</td>
+      </tr>
+    `).join('');
+
+  document.getElementById('tbodyOcupacoes').innerHTML = OCUPACOES.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhuma ocupação registrada ainda.</td></tr>'
+    : OCUPACOES.map(o => `
+      <tr>
+        <td>${nomeFazenda(o.fazenda_id)}</td>
+        <td>${o.ocupante}</td>
+        <td style="text-align:right">${o.quantidade_cabecas}</td>
+        <td>${new Date(o.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+        <td>${o.data_fim ? new Date(o.data_fim + 'T00:00:00').toLocaleDateString('pt-BR') : '<span class="badge bg-success">Ativa</span>'}</td>
+        <td style="text-align:right">${o.valor_mensal ? formatarMoeda(o.valor_mensal) : '—'}</td>
+        <td>${!o.data_fim ? `<button class="btn btn-secondary" style="padding:4px 10px" onclick="encerrarOcupacao(${o.id})"><i class="ti ti-logout"></i> Encerrar</button>` : ''}</td>
+      </tr>
+    `).join('');
+}
+
+// ---------- Faturamento por pasto ----------
+document.getElementById('pData').value = hojeISO();
+
+function atualizarOpcoesOcupacao() {
+  const fazendaId = Number(document.getElementById('pFazenda').value);
+  const ocupacoesDaFazenda = OCUPACOES.filter(o => o.fazenda_id === fazendaId);
+  document.getElementById('pOcupacao').innerHTML = '<option value="">—</option>' +
+    ocupacoesDaFazenda.map(o => `<option value="${o.id}">${o.ocupante} (${o.quantidade_cabecas} cab.)</option>`).join('');
+}
+
+document.getElementById('btnSalvarFaturamento').addEventListener('click', async () => {
+  const fazenda_id = Number(document.getElementById('pFazenda').value);
+  const ocupacao_id = Number(document.getElementById('pOcupacao').value) || null;
+  const data = document.getElementById('pData').value;
+  const valor = parseFloat(document.getElementById('pValor').value);
+  const msg = document.getElementById('msgFaturamento');
+  if (!fazenda_id || !data || isNaN(valor)) {
+    msg.textContent = 'Preencha fazenda, data e valor.';
+    msg.className = 'msg show error';
+    return;
+  }
+  if (!CONTA_PASTO_ID) {
+    msg.textContent = 'Conta "pasto" não encontrada no plano de contas de Terras.';
+    msg.className = 'msg show error';
+    return;
+  }
+
+  const ocupacao = ocupacao_id ? OCUPACOES.find(o => o.id === ocupacao_id) : null;
+  const observacao = document.getElementById('pObservacao').value.trim() || null;
+
+  const { data: lancamento, error: errLanc } = await supabaseClient.from('lancamentos').insert({
+    empresa_id: 1, conta_id: CONTA_PASTO_ID, data, valor_total: valor,
+    historico: `Pasto — ${nomeFazenda(fazenda_id)}${ocupacao ? ' — ' + ocupacao.ocupante : ''}`,
+    fornecedor_comprador: ocupacao ? ocupacao.ocupante : null,
+    observacao,
+  }).select().single();
+
+  if (errLanc) { msg.textContent = 'Erro ao gerar lançamento: ' + errLanc.message; msg.className = 'msg show error'; return; }
+
+  const { error } = await supabaseClient.from('terras_faturamentos_pasto').insert({
+    fazenda_id, ocupacao_id, data, valor, observacao, lancamento_id: lancamento.id,
+  });
+  if (error) { msg.textContent = 'Erro: ' + error.message; msg.className = 'msg show error'; return; }
+
+  msg.textContent = 'Faturamento registrado e lançado no Fluxo de Caixa!'; msg.className = 'msg show success';
+  ['pValor', 'pObservacao'].forEach(id => document.getElementById(id).value = '');
+  await carregarFaturamentos();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 4000);
+});
+
+async function carregarFaturamentos() {
+  if (CONTA_PASTO_ID === null) {
+    const { data } = await supabaseClient.from('contas').select('id').eq('empresa_id', 1).eq('tipo', 'receita').eq('nome', 'pasto').maybeSingle();
+    CONTA_PASTO_ID = data ? data.id : undefined;
+  }
+  if (OCUPACOES.length === 0) await carregarOcupacoes();
+
+  const { data } = await supabaseClient.from('terras_faturamentos_pasto').select('*').order('data', { ascending: false });
+  FATURAMENTOS = data || [];
+
+  const totalGeral = FATURAMENTOS.reduce((s, f) => s + Number(f.valor), 0);
+  const esteAno = FATURAMENTOS.filter(f => f.data.slice(0, 4) === new Date().getFullYear().toString()).reduce((s, f) => s + Number(f.valor), 0);
+  document.getElementById('metricasFaturamento').innerHTML = `
+    <div class="metric"><div class="micon bg-success"><i class="ti ti-cash"></i></div><div><div class="mlabel">Total faturado (histórico)</div><div class="mval">${formatarMoeda(totalGeral)}</div></div></div>
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-calendar"></i></div><div><div class="mlabel">Faturado em ${new Date().getFullYear()}</div><div class="mval">${formatarMoeda(esteAno)}</div></div></div>
+  `;
+
+  const porFazenda = new Map();
+  (window._fazendas || []).forEach(f => porFazenda.set(f.id, 0));
+  FATURAMENTOS.forEach(f => porFazenda.set(f.fazenda_id, (porFazenda.get(f.fazenda_id) || 0) + Number(f.valor)));
+  document.getElementById('tbodyFaturamentoPorFazenda').innerHTML = porFazenda.size === 0
+    ? '<tr class="empty-row"><td colspan="2">Nenhuma fazenda cadastrada ainda.</td></tr>'
+    : [...porFazenda.entries()].map(([id, total]) => `<tr><td>${nomeFazenda(id)}</td><td style="text-align:right">${formatarMoeda(total)}</td></tr>`).join('');
+
+  document.getElementById('tbodyFaturamentos').innerHTML = FATURAMENTOS.length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhum faturamento registrado ainda.</td></tr>'
+    : FATURAMENTOS.map(f => {
+      const ocupacao = f.ocupacao_id ? OCUPACOES.find(o => o.id === f.ocupacao_id) : null;
+      return `
+        <tr>
+          <td>${new Date(f.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+          <td>${nomeFazenda(f.fazenda_id)}</td>
+          <td>${ocupacao ? ocupacao.ocupante : '—'}</td>
+          <td style="text-align:right">${formatarMoeda(f.valor)}</td>
+          <td>${f.observacao || '—'}</td>
+        </tr>
+      `;
+    }).join('');
+}
+
 (async function init() {
   await checkAuth();
   showUserEmail();
-  carregarFazendas();
+  await carregarFazendas();
 })();
 </script>
 

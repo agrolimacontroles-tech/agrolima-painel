@@ -774,3 +774,31 @@ end $$;
 create trigger trg_confinamento_estoque_volumoso after insert or delete on confinamento_volumoso_movimentos
   for each row execute function confinamento_atualiza_estoque_volumoso();
 
+
+-- ============================================================
+-- TERRAS — ocupação das fazendas + faturamento por pasto
+-- ============================================================
+create table terras_ocupacoes (
+  id serial primary key,
+  fazenda_id int not null references terras_fazendas(id),
+  ocupante text not null,
+  quantidade_cabecas int not null,
+  data_inicio date not null,
+  data_fim date,
+  valor_mensal numeric,
+  observacao text,
+  criado_em timestamptz not null default now()
+);
+alter table terras_ocupacoes disable row level security;
+
+create table terras_faturamentos_pasto (
+  id bigserial primary key,
+  fazenda_id int not null references terras_fazendas(id),
+  ocupacao_id int references terras_ocupacoes(id),
+  data date not null,
+  valor numeric not null,
+  lancamento_id bigint references lancamentos(id),
+  observacao text,
+  criado_em timestamptz not null default now()
+);
+alter table terras_faturamentos_pasto disable row level security;
