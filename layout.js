@@ -22,6 +22,7 @@ const MENU_ADMINISTRATIVO = [
 // Os "cd*" são o sistema real do Top Boi (CurralDigital, https://topboi.vercel.app — domínio/Supabase separados).
 const ITEM_DEFS_EMPRESA = {
   terras:     { page: 'terras',    label: 'Terras',        icon: 'ti-map-2', href: () => 'terras.html' },
+  topvacas:   { page: 'topvacas',  label: 'Top Vacas',     icon: 'ti-tag', href: () => 'topvacas.html' },
   maquinas:   { page: 'maquinas',   label: 'Máquinas',      icon: 'ti-tractor', href: () => 'maquinas.html' },
   fabricasal: { page: 'fabricasal', label: 'Fábrica de Sal', icon: 'ti-flask',   href: () => 'fabricasal.html' },
   limabank:   { page: 'limabank',   label: 'Lima Bank',     icon: 'ti-building-bank', href: () => 'limabank.html' },
@@ -37,7 +38,7 @@ const ITEM_DEFS_EMPRESA = {
 const GRUPOS_EMPRESA = [
   { empresaId: 1, nome: 'Terras',                         itens: ['terras', 'fluxocaixa', 'dividas'] },
   { empresaId: 2, nome: 'Top Boi',                         itens: ['cdPainel', 'fluxocaixa', 'dividas', 'estoque'] },
-  { empresaId: 3, nome: 'Top Vacas',                       itens: ['fluxocaixa', 'dividas', 'estoque'] },
+  { empresaId: 3, nome: 'Top Vacas',                       itens: ['topvacas', 'fluxocaixa', 'dividas', 'estoque'] },
   { empresaId: 4, nome: 'Confinamento',                    itens: ['fluxocaixa', 'dividas', 'estoque'] },
   { empresaId: 5, nome: 'Máquinas',                        itens: ['maquinas', 'fluxocaixa', 'dividas'] },
   { empresaId: 6, nome: 'Fábrica de Sal',                  itens: ['fabricasal', 'fluxocaixa', 'dividas', 'estoqueFabricaSal'] },

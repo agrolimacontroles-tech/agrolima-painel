@@ -41,7 +41,7 @@ create table lancamentos (
   fornecedor_comprador text,
   comprovante_url text,
   observacao text,
-  origem text default 'manual',      -- 'manual' | 'auto_maquina' | 'auto_lima_bank' (lançamentos gerados pelo sistema)
+  origem text default 'manual',      -- 'manual' | 'auto_maquina' | 'auto_lima_bank' (lançamentos gerados pelo sistema) | 'importado_planilha'
   origem_ref_id bigint,               -- aponta pra uso_maquina.id ou movimentos_lima_bank.id quando origem != manual
   created_at timestamptz not null default now()
 );
@@ -525,3 +525,174 @@ create table funcionario_atividades (
 );
 
 alter table funcionario_atividades disable row level security;
+-- ============================================================
+-- TOP VACAS — manejo de rebanho (adaptado do OrdenhaDigital, sem nada de leite)
+-- ============================================================
+
+create table topvacas_lotes (
+  id serial primary key,
+  nome text not null unique,
+  tipo text not null default 'outro' check (tipo in ('cria','recria','engorda','reproducao','outro')),
+  ordem int not null default 0,
+  ativo boolean not null default true
+);
+alter table topvacas_lotes disable row level security;
+
+create table topvacas_touros (
+  id serial primary key,
+  codigo text not null unique,
+  raca text,
+  central text,
+  sexado boolean not null default false,
+  doses int not null default 0,
+  preco_dose numeric(10,2) not null default 0,
+  ativo boolean not null default true
+);
+alter table topvacas_touros disable row level security;
+
+create table topvacas_animais (
+  id bigserial primary key,
+  brinco text not null unique,
+  nome text,
+  sexo text check (sexo in ('M', 'F')),
+  raca text,
+  categoria text not null check (categoria in ('Bezerra', 'Bezerro', 'Novilha', 'Vaca', 'Touro')),
+  data_nascimento date,
+  mae_id bigint references topvacas_animais(id) on delete set null,
+  pai text,
+  lote_id int references topvacas_lotes(id) on delete set null,
+  numero_partos int not null default 0,
+  data_ultimo_parto date,
+  situacao_reprodutiva text not null default 'Vazia'
+    check (situacao_reprodutiva in ('Em recria', 'Apta p/ IA', 'Pós-parto', 'Vazia', 'Inseminada', 'Prenhe')),
+  data_ultima_ia date,
+  touro_ultima_ia text,
+  ias_no_ciclo int not null default 0,
+  colostro_ok boolean,
+  data_b19 date,
+  data_desmama date,
+  peso numeric(6,1),
+  ativo boolean not null default true,
+  data_saida date,
+  motivo_saida text,
+  observacao text,
+  criado_em timestamptz not null default now()
+);
+create index topvacas_animais_categoria_idx on topvacas_animais(categoria) where ativo;
+alter table topvacas_animais disable row level security;
+
+create table topvacas_eventos (
+  id bigserial primary key,
+  animal_id bigint not null references topvacas_animais(id) on delete cascade,
+  data date not null,
+  tipo text not null,
+  touro_id int references topvacas_touros(id) on delete set null,
+  detalhe text,
+  criado_em timestamptz not null default now()
+);
+create index topvacas_eventos_animal_idx on topvacas_eventos(animal_id, data desc);
+alter table topvacas_eventos disable row level security;
+
+create table topvacas_tratamentos (
+  id bigserial primary key,
+  animal_id bigint not null references topvacas_animais(id) on delete cascade,
+  doenca text not null,
+  medicamento text not null,
+  data_inicio date not null,
+  dias_aplicacao int not null default 1,
+  carencia_carne int not null default 0,
+  data_liberacao date generated always as (data_inicio + dias_aplicacao + carencia_carne) stored,
+  observacao text,
+  criado_em timestamptz not null default now()
+);
+alter table topvacas_tratamentos disable row level security;
+
+create table topvacas_manejos_sanitarios (
+  id serial primary key,
+  nome text not null unique,
+  grupo text,
+  frequencia_dias int not null,
+  ativo boolean not null default true
+);
+alter table topvacas_manejos_sanitarios disable row level security;
+
+create table topvacas_aplicacoes_sanitarias (
+  id bigserial primary key,
+  manejo_id int not null references topvacas_manejos_sanitarios(id) on delete cascade,
+  data date not null,
+  observacao text
+);
+alter table topvacas_aplicacoes_sanitarias disable row level security;
+
+create table topvacas_insumos (
+  id serial primary key,
+  nome text not null unique,
+  unidade text not null default 'kg',
+  preco numeric(10,2) not null default 0,
+  estoque numeric(12,2) not null default 0,
+  ativo boolean not null default true
+);
+alter table topvacas_insumos disable row level security;
+
+create table topvacas_insumo_movimentos (
+  id bigserial primary key,
+  insumo_id int not null references topvacas_insumos(id) on delete cascade,
+  data date not null,
+  tipo text not null check (tipo in ('entrada', 'saida', 'ajuste')),
+  quantidade numeric(12,2) not null,
+  valor_unitario numeric(10,2),
+  observacao text
+);
+alter table topvacas_insumo_movimentos disable row level security;
+
+create or replace function topvacas_atualiza_estoque_insumo() returns trigger language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.tipo = 'entrada' then
+      update topvacas_insumos set estoque = estoque + new.quantidade,
+             preco = coalesce(nullif(new.valor_unitario,0), preco) where id = new.insumo_id;
+    elsif new.tipo = 'saida' then
+      update topvacas_insumos set estoque = estoque - new.quantidade where id = new.insumo_id;
+    else
+      update topvacas_insumos set estoque = new.quantidade where id = new.insumo_id;
+    end if;
+    return new;
+  elsif tg_op = 'DELETE' then
+    if old.tipo = 'entrada' then
+      update topvacas_insumos set estoque = estoque - old.quantidade where id = old.insumo_id;
+    elsif old.tipo = 'saida' then
+      update topvacas_insumos set estoque = estoque + old.quantidade where id = old.insumo_id;
+    end if;
+    return old;
+  end if;
+  return null;
+end $$;
+create trigger trg_topvacas_estoque_insumo after insert or delete on topvacas_insumo_movimentos
+  for each row execute function topvacas_atualiza_estoque_insumo();
+
+create table topvacas_dietas (
+  id serial primary key,
+  lote_id int not null references topvacas_lotes(id) on delete cascade,
+  insumo_id int not null references topvacas_insumos(id) on delete cascade,
+  kg_cab_dia numeric(8,2) not null,
+  unique (lote_id, insumo_id)
+);
+alter table topvacas_dietas disable row level security;
+
+insert into topvacas_lotes (nome, tipo, ordem) values
+  ('Cria', 'cria', 1),
+  ('Recria', 'recria', 2),
+  ('Reprodução', 'reproducao', 3),
+  ('Engorda', 'engorda', 4)
+on conflict (nome) do nothing;
+
+insert into topvacas_manejos_sanitarios (nome, grupo, frequencia_dias) values
+  ('Raiva', 'Todo o rebanho', 365),
+  ('Clostridioses (polivalente)', 'Todo o rebanho', 180),
+  ('Leptospirose', 'Vacas e novilhas', 180),
+  ('IBR / BVD', 'Vacas e novilhas', 180),
+  ('Exame de brucelose e tuberculose', 'Rebanho adulto', 365),
+  ('Vermifugação estratégica', 'Novilhas e bezerras', 60),
+  ('Controle de carrapato', 'Todo o rebanho', 21)
+on conflict (nome) do nothing;
+

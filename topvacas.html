@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Top Vacas</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('topvacas');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Top Vacas</div>
+      <div class="pagesub">Manejo de rebanho — reprodução, sanidade e nutrição</div>
+    </div>
+  </div>
+
+  <div class="subtoggle">
+    <button class="stbtn active" id="btnTabPainel" onclick="mostrarAba('painel')">Painel</button>
+    <button class="stbtn" id="btnTabRebanho" onclick="mostrarAba('rebanho')">Rebanho</button>
+    <button class="stbtn" id="btnTabBezerras" onclick="mostrarAba('bezerras')">Bezerras</button>
+    <button class="stbtn" id="btnTabReproducao" onclick="mostrarAba('reproducao')">Reprodução</button>
+    <button class="stbtn" id="btnTabSanidade" onclick="mostrarAba('sanidade')">Sanidade</button>
+    <button class="stbtn" id="btnTabNutricao" onclick="mostrarAba('nutricao')">Nutrição</button>
+  </div>
+
+  <div id="abaPainel">
+    <div class="metrics" id="metricasPainel"><div class="metric"><span class="spinner"></span></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+      <div class="card">
+        <div class="cardh"><i class="ti ti-calendar-event"></i> Partos previstos (próximos 60 dias)</div>
+        <div class="cardb table-wrap">
+          <table><thead><tr><th>Brinco</th><th>Nome</th><th>Previsão</th></tr></thead>
+          <tbody id="tbodyPartosPrevistos"><tr class="empty-row"><td colspan="3"><span class="spinner"></span></td></tr></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="cardh"><i class="ti ti-vaccine"></i> Manejos sanitários atrasados</div>
+        <div class="cardb table-wrap">
+          <table><thead><tr><th>Manejo</th><th>Última aplicação</th><th>Atraso</th></tr></thead>
+          <tbody id="tbodyManejosAtrasados"><tr class="empty-row"><td colspan="3"><span class="spinner"></span></td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaRebanho" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Novo animal</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Brinco *</label><input type="text" id="aBrinco"></div>
+          <div class="fgroup"><label>Nome</label><input type="text" id="aNome"></div>
+          <div class="fgroup"><label>Sexo</label><select id="aSexo"><option value="F">Fêmea</option><option value="M">Macho</option></select></div>
+          <div class="fgroup"><label>Categoria</label><select id="aCategoria"></select></div>
+          <div class="fgroup"><label>Raça</label><input type="text" id="aRaca"></div>
+          <div class="fgroup"><label>Data de nascimento</label><input type="date" id="aDataNascimento"></div>
+          <div class="fgroup"><label>Mãe</label><select id="aMae"><option value="">—</option></select></div>
+          <div class="fgroup"><label>Pai</label><input type="text" id="aPai"></div>
+          <div class="fgroup"><label>Lote</label><select id="aLote"></select></div>
+          <div class="fgroup"><label>Peso (kg)</label><input type="number" id="aPeso" step="0.1"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarAnimal"><i class="ti ti-check"></i> Cadastrar</button>
+        <span id="msgAnimal" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh">Rebanho ativo</div>
+      <div class="cardb">
+        <div class="blocos-funcionarios" id="filtrosCategoria"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Brinco</th><th>Nome</th><th>Categoria</th><th>Raça</th><th>Idade</th><th>Peso</th><th>Lote</th><th>Situação</th><th></th></tr></thead>
+            <tbody id="tbodyRebanho"><tr class="empty-row"><td colspan="9"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaBezerras" style="display:none">
+    <div class="card">
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Brinco</th><th>Nome</th><th>Mãe</th><th>Nascimento</th><th>Idade</th><th>Colostro</th><th>Vacina B19</th><th>Desmama</th></tr></thead>
+          <tbody id="tbodyBezerras"><tr class="empty-row"><td colspan="8"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaReproducao" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Novo evento reprodutivo</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Animal (fêmea)</label><select id="eAnimal"></select></div>
+          <div class="fgroup"><label>Tipo</label><select id="eTipo" onchange="atualizarCamposEvento()"></select></div>
+          <div class="fgroup"><label>Data</label><input type="date" id="eData"></div>
+          <div class="fgroup" id="campoTouro"><label>Touro / sêmen</label><select id="eTouro"><option value="">—</option></select></div>
+          <div class="fgroup full"><label>Detalhe</label><input type="text" id="eDetalhe"></div>
+        </div>
+        <div id="camposParto" style="display:none">
+          <div class="frow cols-3">
+            <div class="fgroup"><label>Brinco da cria</label><input type="text" id="eCriaBrinco"></div>
+            <div class="fgroup"><label>Sexo da cria</label><select id="eCriaSexo"><option value="F">Fêmea</option><option value="M">Macho</option></select></div>
+            <div class="fgroup"><label>Peso ao nascer (kg)</label><input type="number" id="eCriaPeso" step="0.1"></div>
+            <div class="fgroup"><label>&nbsp;</label><label style="font-weight:400"><input type="checkbox" id="eCriaColostro"> Colostro ok</label></div>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarEvento"><i class="ti ti-check"></i> Registrar</button>
+        <span id="msgEvento" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh">Situação reprodutiva do rebanho</div>
+      <div class="cardb table-wrap">
+        <table><thead><tr><th>Brinco</th><th>Nome</th><th>Situação</th><th>Última IA</th><th>Touro</th><th>Parto previsto</th></tr></thead>
+        <tbody id="tbodySituacaoReprodutiva"><tr class="empty-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh">Histórico de eventos</div>
+      <div class="cardb table-wrap">
+        <table><thead><tr><th>Data</th><th>Animal</th><th>Tipo</th><th>Detalhe</th></tr></thead>
+        <tbody id="tbodyEventos"><tr class="empty-row"><td colspan="4"><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaSanidade" style="display:none">
+    <div class="card">
+      <div class="cardh">Manejos sanitários (protocolo do rebanho)</div>
+      <div class="cardb table-wrap">
+        <table><thead><tr><th>Manejo</th><th>Grupo</th><th>Frequência</th><th>Última aplicação</th><th></th></tr></thead>
+        <tbody id="tbodyManejos"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Novo tratamento individual</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Animal</label><select id="tAnimal"></select></div>
+          <div class="fgroup"><label>Doença</label><input type="text" id="tDoenca"></div>
+          <div class="fgroup"><label>Medicamento</label><input type="text" id="tMedicamento"></div>
+          <div class="fgroup"><label>Data início</label><input type="date" id="tDataInicio"></div>
+          <div class="fgroup"><label>Dias de aplicação</label><input type="number" id="tDias" value="1"></div>
+          <div class="fgroup"><label>Carência (carne, dias)</label><input type="number" id="tCarencia" value="0"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarTratamento"><i class="ti ti-check"></i> Registrar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh">Tratamentos registrados</div>
+      <div class="cardb table-wrap">
+        <table><thead><tr><th>Animal</th><th>Doença</th><th>Medicamento</th><th>Início</th><th>Liberação</th><th>Status</th></tr></thead>
+        <tbody id="tbodyTratamentos"><tr class="empty-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaNutricao" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Novo insumo</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Nome</label><input type="text" id="iNome"></div>
+          <div class="fgroup"><label>Unidade</label><input type="text" id="iUnidade" value="kg"></div>
+          <div class="fgroup"><label>Preço</label><input type="number" id="iPreco" step="0.01"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarInsumo"><i class="ti ti-check"></i> Cadastrar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh">Estoque de insumos</div>
+      <div class="cardb table-wrap">
+        <table><thead><tr><th>Insumo</th><th style="text-align:right">Estoque</th><th style="text-align:right">Preço</th></tr></thead>
+        <tbody id="tbodyInsumos"><tr class="empty-row"><td colspan="3"><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Movimento de estoque</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Insumo</label><select id="mInsumo"></select></div>
+          <div class="fgroup"><label>Tipo</label><select id="mTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="ajuste">Ajuste (novo saldo)</option></select></div>
+          <div class="fgroup"><label>Quantidade</label><input type="number" id="mQuantidade" step="0.01"></div>
+          <div class="fgroup"><label>Data</label><input type="date" id="mData"></div>
+          <div class="fgroup"><label>Valor unitário</label><input type="number" id="mValorUnitario" step="0.01"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarMovimento"><i class="ti ti-check"></i> Registrar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardh">Dieta por lote</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Lote</label><select id="dLote"></select></div>
+          <div class="fgroup"><label>Insumo</label><select id="dInsumo"></select></div>
+          <div class="fgroup"><label>Kg/cabeça/dia</label><input type="number" id="dKgCabDia" step="0.01"></div>
+        </div>
+        <button class="btn btn-secondary" id="btnSalvarDieta"><i class="ti ti-check"></i> Definir</button>
+        <div class="table-wrap" style="margin-top:12px">
+          <table><thead><tr><th>Lote</th><th>Insumo</th><th style="text-align:right">Kg/cab/dia</th><th></th></tr></thead>
+          <tbody id="tbodyDietas"><tr class="empty-row"><td colspan="4"><span class="spinner"></span></td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+
+const CATEGORIAS = ['Bezerra', 'Bezerro', 'Novilha', 'Vaca', 'Touro'];
+const TIPOS_EVENTO = ['Inseminação', 'Monta natural', 'Diagnóstico positivo', 'Diagnóstico negativo', 'Cio observado', 'Parto', 'Aborto'];
+const DIAS_GESTACAO = 283;
+
+let LOTES = [], TOUROS = [], ANIMAIS = [], EVENTOS = [], TRATAMENTOS = [], MANEJOS = [], APLICACOES = [], INSUMOS = [], DIETAS = [];
+let filtroCategoria = 'Todos';
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+function addDias(dataISO, n) { const d = new Date(dataISO + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+function fmtData(dataISO) { return dataISO ? new Date(dataISO + 'T00:00:00').toLocaleDateString('pt-BR') : '—'; }
+function idadeTxt(dataISO) {
+  if (!dataISO) return '—';
+  const nasc = new Date(dataISO + 'T00:00:00'), hoje = new Date();
+  let meses = (hoje.getFullYear() - nasc.getFullYear()) * 12 + (hoje.getMonth() - nasc.getMonth());
+  if (hoje.getDate() < nasc.getDate()) meses--;
+  return meses < 12 ? `${meses} m` : `${(meses / 12).toFixed(1)} a`;
+}
+function animalPorId(id) { return ANIMAIS.find(a => a.id === id); }
+function nomeAnimal(id) { const a = animalPorId(id); return a ? `${a.brinco}${a.nome ? ' — ' + a.nome : ''}` : '—'; }
+function nomeLote(id) { return (LOTES.find(l => l.id === id) || {}).nome || '—'; }
+
+function mostrarAba(aba) {
+  ['painel', 'rebanho', 'bezerras', 'reproducao', 'sanidade', 'nutricao'].forEach(a => {
+    document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
+    document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
+  });
+}
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  document.getElementById('aCategoria').innerHTML = CATEGORIAS.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('eTipo').innerHTML = TIPOS_EVENTO.map(t => `<option>${t}</option>`).join('');
+  document.getElementById('aDataNascimento').value = hojeISO();
+  document.getElementById('eData').value = hojeISO();
+  document.getElementById('tDataInicio').value = hojeISO();
+  document.getElementById('mData').value = hojeISO();
+
+  const [lotes, touros, animais, eventos, tratamentos, manejos, aplicacoes, insumos, dietas] = await Promise.all([
+    supabaseClient.from('topvacas_lotes').select('*').order('ordem').then(r => r.data || []),
+    supabaseClient.from('topvacas_touros').select('*').eq('ativo', true).order('codigo').then(r => r.data || []),
+    buscarPaginado(() => supabaseClient.from('topvacas_animais').select('*').order('brinco')),
+    buscarPaginado(() => supabaseClient.from('topvacas_eventos').select('*').order('data', { ascending: false })),
+    buscarPaginado(() => supabaseClient.from('topvacas_tratamentos').select('*').order('data_inicio', { ascending: false })),
+    supabaseClient.from('topvacas_manejos_sanitarios').select('*').eq('ativo', true).order('nome').then(r => r.data || []),
+    buscarPaginado(() => supabaseClient.from('topvacas_aplicacoes_sanitarias').select('*').order('data', { ascending: false })),
+    supabaseClient.from('topvacas_insumos').select('*').eq('ativo', true).order('nome').then(r => r.data || []),
+    supabaseClient.from('topvacas_dietas').select('*').then(r => r.data || []),
+  ]);
+  LOTES = lotes; TOUROS = touros; ANIMAIS = animais; EVENTOS = eventos; TRATAMENTOS = tratamentos;
+  MANEJOS = manejos; APLICACOES = aplicacoes; INSUMOS = insumos; DIETAS = dietas;
+
+  renderSelects();
+  renderPainel();
+  renderRebanho();
+  renderBezerras();
+  renderReproducao();
+  renderSanidade();
+  renderNutricao();
+}
+
+function renderSelects() {
+  const loteOpcoes = LOTES.map(l => `<option value="${l.id}">${l.nome}</option>`).join('');
+  document.getElementById('aLote').innerHTML = `<option value="">—</option>` + loteOpcoes;
+  document.getElementById('dLote').innerHTML = loteOpcoes;
+
+  const femeasAtivas = ANIMAIS.filter(a => a.ativo && a.sexo === 'F');
+  document.getElementById('aMae').innerHTML = `<option value="">—</option>` + femeasAtivas.map(a => `<option value="${a.id}">${a.brinco}${a.nome ? ' — ' + a.nome : ''}</option>`).join('');
+  document.getElementById('eAnimal').innerHTML = femeasAtivas.map(a => `<option value="${a.id}">${a.brinco}${a.nome ? ' — ' + a.nome : ''}</option>`).join('');
+  document.getElementById('tAnimal').innerHTML = ANIMAIS.filter(a => a.ativo).map(a => `<option value="${a.id}">${a.brinco}${a.nome ? ' — ' + a.nome : ''}</option>`).join('');
+  document.getElementById('eTouro').innerHTML = `<option value="">—</option>` + TOUROS.map(t => `<option value="${t.id}">${t.codigo}${t.raca ? ' — ' + t.raca : ''}</option>`).join('');
+
+  const insumoOpcoes = INSUMOS.map(i => `<option value="${i.id}">${i.nome}</option>`).join('');
+  document.getElementById('mInsumo').innerHTML = insumoOpcoes;
+  document.getElementById('dInsumo').innerHTML = insumoOpcoes;
+
+  atualizarCamposEvento();
+}
+
+// ---------- Painel ----------
+function renderPainel() {
+  const ativos = ANIMAIS.filter(a => a.ativo);
+  const porCategoria = {};
+  CATEGORIAS.forEach(c => porCategoria[c] = 0);
+  ativos.forEach(a => porCategoria[a.categoria] = (porCategoria[a.categoria] || 0) + 1);
+
+  document.getElementById('metricasPainel').innerHTML = `
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-tag"></i></div><div><div class="mlabel">Animais ativos</div><div class="mval">${ativos.length}</div></div></div>
+    ${CATEGORIAS.map(c => `<div class="metric"><div class="micon bg-info"><i class="ti ti-circle"></i></div><div><div class="mlabel">${c}</div><div class="mval">${porCategoria[c]}</div></div></div>`).join('')}
+  `;
+
+  const hoje = hojeISO();
+  const em60dias = addDias(hoje, 60);
+  const previstos = ativos
+    .filter(a => a.situacao_reprodutiva === 'Prenhe' && a.data_ultima_ia)
+    .map(a => ({ ...a, previsao: addDias(a.data_ultima_ia, DIAS_GESTACAO) }))
+    .filter(a => a.previsao <= em60dias)
+    .sort((a, b) => a.previsao.localeCompare(b.previsao));
+
+  document.getElementById('tbodyPartosPrevistos').innerHTML = previstos.length === 0
+    ? '<tr class="empty-row"><td colspan="3">Nenhum parto previsto nos próximos 60 dias.</td></tr>'
+    : previstos.map(a => `<tr><td>${a.brinco}</td><td>${a.nome || '—'}</td><td style="color:${a.previsao < hoje ? 'var(--danger)' : 'var(--text)'}">${fmtData(a.previsao)}${a.previsao < hoje ? ' (atrasado)' : ''}</td></tr>`).join('');
+
+  const atrasados = MANEJOS.map(m => {
+    const aplicacoesDoManejo = APLICACOES.filter(ap => ap.manejo_id === m.id).sort((a, b) => b.data.localeCompare(a.data));
+    const ultima = aplicacoesDoManejo[0];
+    const diasDesde = ultima ? Math.floor((new Date(hoje) - new Date(ultima.data + 'T00:00:00')) / 86400000) : null;
+    const atrasado = diasDesde === null || diasDesde > m.frequencia_dias;
+    return { ...m, ultima: ultima ? ultima.data : null, diasDesde, atrasado };
+  }).filter(m => m.atrasado);
+
+  document.getElementById('tbodyManejosAtrasados').innerHTML = atrasados.length === 0
+    ? '<tr class="empty-row"><td colspan="3">Nenhum manejo atrasado.</td></tr>'
+    : atrasados.map(m => `<tr><td>${m.nome}</td><td>${m.ultima ? fmtData(m.ultima) : 'nunca aplicado'}</td><td style="color:var(--danger)">${m.diasDesde !== null ? (m.diasDesde - m.frequencia_dias) + ' dias' : '—'}</td></tr>`).join('');
+}
+
+// ---------- Rebanho ----------
+document.getElementById('btnSalvarAnimal').addEventListener('click', async () => {
+  const brinco = document.getElementById('aBrinco').value.trim();
+  const categoria = document.getElementById('aCategoria').value;
+  const msg = document.getElementById('msgAnimal');
+  if (!brinco) { msg.textContent = 'Informe o brinco.'; msg.className = 'msg show error'; return; }
+
+  const { error } = await supabaseClient.from('topvacas_animais').insert({
+    brinco,
+    nome: document.getElementById('aNome').value.trim() || null,
+    sexo: document.getElementById('aSexo').value,
+    categoria,
+    raca: document.getElementById('aRaca').value.trim() || null,
+    data_nascimento: document.getElementById('aDataNascimento').value || null,
+    mae_id: Number(document.getElementById('aMae').value) || null,
+    pai: document.getElementById('aPai').value.trim() || null,
+    lote_id: Number(document.getElementById('aLote').value) || null,
+    peso: parseFloat(document.getElementById('aPeso').value) || null,
+    situacao_reprodutiva: ['Novilha', 'Bezerra', 'Bezerro'].includes(categoria) ? 'Em recria' : 'Vazia',
+  });
+  if (error) { msg.textContent = 'Erro: ' + error.message; msg.className = 'msg show error'; return; }
+
+  msg.textContent = 'Animal cadastrado!'; msg.className = 'msg show success';
+  ['aBrinco', 'aNome', 'aRaca', 'aPai', 'aPeso'].forEach(id => document.getElementById(id).value = '');
+  await carregarBase();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+function badgeSituacao(s) {
+  const map = { 'Prenhe': 'bg-success', 'Inseminada': 'bg-info', 'Pós-parto': 'bg-warning', 'Vazia': 'bg-danger', 'Apta p/ IA': 'bg-info', 'Em recria': 'bg-info' };
+  return `<span class="badge ${map[s] || 'bg-info'}">${s}</span>`;
+}
+
+function renderFiltrosCategoria() {
+  const ativos = ANIMAIS.filter(a => a.ativo);
+  const opcoes = ['Todos', ...CATEGORIAS];
+  document.getElementById('filtrosCategoria').innerHTML = opcoes.map(c => `
+    <button class="bloco-funcionario ${c === filtroCategoria ? 'selecionado' : ''}" onclick="selecionarFiltroCategoria('${c}')">${c} <span style="opacity:.7">${c === 'Todos' ? ativos.length : ativos.filter(a => a.categoria === c).length}</span></button>
+  `).join('');
+}
+function selecionarFiltroCategoria(c) { filtroCategoria = c; renderRebanho(); }
+
+function renderRebanho() {
+  renderFiltrosCategoria();
+  const ativos = ANIMAIS.filter(a => a.ativo && (filtroCategoria === 'Todos' || a.categoria === filtroCategoria));
+  document.getElementById('tbodyRebanho').innerHTML = ativos.length === 0
+    ? '<tr class="empty-row"><td colspan="9">Nenhum animal nessa categoria.</td></tr>'
+    : ativos.map(a => `
+      <tr>
+        <td><b>${a.brinco}</b></td>
+        <td>${a.nome || '—'}</td>
+        <td>${a.categoria}</td>
+        <td>${a.raca || '—'}</td>
+        <td>${idadeTxt(a.data_nascimento)}</td>
+        <td>${a.peso ? a.peso + ' kg' : '—'}</td>
+        <td>${nomeLote(a.lote_id)}</td>
+        <td>${badgeSituacao(a.situacao_reprodutiva)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-danger" style="padding:4px 10px" onclick="darBaixaAnimal(${a.id})" title="Dar baixa"><i class="ti ti-logout-2"></i></button>
+        </td>
+      </tr>
+    `).join('');
+}
+
+async function darBaixaAnimal(id) {
+  const motivo = prompt('Motivo da saída (venda, morte, transferência...):');
+  if (motivo === null) return;
+  await supabaseClient.from('topvacas_animais').update({ ativo: false, data_saida: hojeISO(), motivo_saida: motivo || null }).eq('id', id);
+  await supabaseClient.from('topvacas_eventos').insert({ animal_id: id, data: hojeISO(), tipo: 'Saída', detalhe: motivo || null });
+  await carregarBase();
+}
+
+// ---------- Bezerras ----------
+function renderBezerras() {
+  const bezerras = ANIMAIS.filter(a => a.ativo && ['Bezerra', 'Bezerro'].includes(a.categoria));
+  document.getElementById('tbodyBezerras').innerHTML = bezerras.length === 0
+    ? '<tr class="empty-row"><td colspan="8">Nenhuma bezerra/bezerro ativo.</td></tr>'
+    : bezerras.map(a => `
+      <tr>
+        <td><b>${a.brinco}</b></td>
+        <td>${a.nome || '—'}</td>
+        <td>${a.mae_id ? nomeAnimal(a.mae_id) : '—'}</td>
+        <td>${fmtData(a.data_nascimento)}</td>
+        <td>${idadeTxt(a.data_nascimento)}</td>
+        <td>${a.colostro_ok === true ? '<span class="badge bg-success">Sim</span>' : a.colostro_ok === false ? '<span class="badge bg-danger">Não</span>' : '—'}</td>
+        <td>${a.data_b19 ? fmtData(a.data_b19) : `<button class="btn btn-secondary" style="padding:3px 8px" onclick="marcarB19(${a.id})">Marcar</button>`}</td>
+        <td>${a.data_desmama ? fmtData(a.data_desmama) : `<button class="btn btn-secondary" style="padding:3px 8px" onclick="marcarDesmama(${a.id})">Desmamar</button>`}</td>
+      </tr>
+    `).join('');
+}
+async function marcarB19(id) {
+  await supabaseClient.from('topvacas_animais').update({ data_b19: hojeISO() }).eq('id', id);
+  await supabaseClient.from('topvacas_eventos').insert({ animal_id: id, data: hojeISO(), tipo: 'Vacina B19' });
+  await carregarBase();
+}
+async function marcarDesmama(id) {
+  await supabaseClient.from('topvacas_animais').update({ data_desmama: hojeISO() }).eq('id', id);
+  await supabaseClient.from('topvacas_eventos').insert({ animal_id: id, data: hojeISO(), tipo: 'Desmama' });
+  await carregarBase();
+}
+
+// ---------- Reprodução ----------
+function atualizarCamposEvento() {
+  const tipo = document.getElementById('eTipo').value;
+  document.getElementById('campoTouro').style.display = ['Inseminação', 'Monta natural'].includes(tipo) ? '' : 'none';
+  document.getElementById('camposParto').style.display = tipo === 'Parto' ? '' : 'none';
+}
+
+document.getElementById('btnSalvarEvento').addEventListener('click', async () => {
+  const animal_id = Number(document.getElementById('eAnimal').value);
+  const tipo = document.getElementById('eTipo').value;
+  const data = document.getElementById('eData').value;
+  const msg = document.getElementById('msgEvento');
+  if (!animal_id || !data) { msg.textContent = 'Selecione o animal e a data.'; msg.className = 'msg show error'; return; }
+
+  const touro_id = Number(document.getElementById('eTouro').value) || null;
+  const touro = touro_id ? TOUROS.find(t => t.id === touro_id) : null;
+  const detalhe = document.getElementById('eDetalhe').value.trim() || null;
+  const a = animalPorId(animal_id);
+
+  await supabaseClient.from('topvacas_eventos').insert({ animal_id, data, tipo, touro_id, detalhe });
+
+  const up = {};
+  if (['Inseminação', 'Monta natural'].includes(tipo)) {
+    Object.assign(up, {
+      data_ultima_ia: data,
+      touro_ultima_ia: touro ? touro.codigo : null,
+      situacao_reprodutiva: 'Inseminada',
+      ias_no_ciclo: (['Vazia', 'Inseminada'].includes(a.situacao_reprodutiva) ? (a.ias_no_ciclo || 0) : 0) + 1,
+    });
+  } else if (tipo === 'Diagnóstico positivo') {
+    up.situacao_reprodutiva = 'Prenhe';
+  } else if (tipo === 'Diagnóstico negativo' || tipo === 'Aborto') {
+    up.situacao_reprodutiva = 'Vazia';
+  } else if (tipo === 'Parto') {
+    const paiCria = a.touro_ultima_ia;
+    Object.assign(up, {
+      categoria: 'Vaca',
+      numero_partos: (a.numero_partos || 0) + 1,
+      data_ultimo_parto: data,
+      situacao_reprodutiva: 'Pós-parto',
+      data_ultima_ia: null,
+      touro_ultima_ia: null,
+      ias_no_ciclo: 0,
+    });
+
+    const brincoCria = document.getElementById('eCriaBrinco').value.trim();
+    if (brincoCria) {
+      const sexoCria = document.getElementById('eCriaSexo').value;
+      const loteCria = LOTES.find(l => l.tipo === 'cria');
+      const { data: cria } = await supabaseClient.from('topvacas_animais').insert({
+        brinco: brincoCria,
+        sexo: sexoCria,
+        categoria: sexoCria === 'M' ? 'Bezerro' : 'Bezerra',
+        data_nascimento: data,
+        mae_id: animal_id,
+        pai: paiCria,
+        lote_id: loteCria ? loteCria.id : null,
+        peso: parseFloat(document.getElementById('eCriaPeso').value) || null,
+        colostro_ok: document.getElementById('eCriaColostro').checked,
+        situacao_reprodutiva: 'Em recria',
+      }).select().single();
+      if (cria) await supabaseClient.from('topvacas_eventos').insert({ animal_id: cria.id, data, tipo: 'Nascimento', detalhe: `Filho${sexoCria === 'M' ? '' : 'a'} de ${a.brinco}` });
+    }
+  }
+  if (Object.keys(up).length > 0) await supabaseClient.from('topvacas_animais').update(up).eq('id', animal_id);
+
+  msg.textContent = 'Evento registrado!'; msg.className = 'msg show success';
+  document.getElementById('eDetalhe').value = '';
+  document.getElementById('eCriaBrinco').value = '';
+  document.getElementById('eCriaPeso').value = '';
+  document.getElementById('eCriaColostro').checked = false;
+  await carregarBase();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+function renderReproducao() {
+  const femeas = ANIMAIS.filter(a => a.ativo && a.sexo === 'F' && ['Novilha', 'Vaca'].includes(a.categoria));
+  document.getElementById('tbodySituacaoReprodutiva').innerHTML = femeas.length === 0
+    ? '<tr class="empty-row"><td colspan="6">Nenhuma fêmea em idade reprodutiva.</td></tr>'
+    : femeas.map(a => `
+      <tr>
+        <td>${a.brinco}</td>
+        <td>${a.nome || '—'}</td>
+        <td>${badgeSituacao(a.situacao_reprodutiva)}</td>
+        <td>${fmtData(a.data_ultima_ia)}</td>
+        <td>${a.touro_ultima_ia || '—'}</td>
+        <td>${a.situacao_reprodutiva === 'Prenhe' && a.data_ultima_ia ? fmtData(addDias(a.data_ultima_ia, DIAS_GESTACAO)) : '—'}</td>
+      </tr>
+    `).join('');
+
+  document.getElementById('tbodyEventos').innerHTML = EVENTOS.length === 0
+    ? '<tr class="empty-row"><td colspan="4">Nenhum evento registrado.</td></tr>'
+    : EVENTOS.slice(0, 100).map(e => `
+      <tr><td>${fmtData(e.data)}</td><td>${nomeAnimal(e.animal_id)}</td><td>${e.tipo}</td><td>${e.detalhe || '—'}</td></tr>
+    `).join('');
+}
+
+// ---------- Sanidade ----------
+async function aplicarManejo(manejoId) {
+  await supabaseClient.from('topvacas_aplicacoes_sanitarias').insert({ manejo_id: manejoId, data: hojeISO() });
+  await carregarBase();
+}
+
+function renderSanidade() {
+  const hoje = hojeISO();
+  document.getElementById('tbodyManejos').innerHTML = MANEJOS.map(m => {
+    const aplicacoesDoManejo = APLICACOES.filter(ap => ap.manejo_id === m.id).sort((a, b) => b.data.localeCompare(a.data));
+    const ultima = aplicacoesDoManejo[0];
+    return `
+      <tr>
+        <td>${m.nome}</td>
+        <td>${m.grupo || '—'}</td>
+        <td>a cada ${m.frequencia_dias} dias</td>
+        <td>${ultima ? fmtData(ultima.data) : 'nunca aplicado'}</td>
+        <td><button class="btn btn-secondary" style="padding:4px 10px" onclick="aplicarManejo(${m.id})"><i class="ti ti-check"></i> Aplicar hoje</button></td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('tbodyTratamentos').innerHTML = TRATAMENTOS.length === 0
+    ? '<tr class="empty-row"><td colspan="6">Nenhum tratamento registrado.</td></tr>'
+    : TRATAMENTOS.map(t => `
+      <tr>
+        <td>${nomeAnimal(t.animal_id)}</td>
+        <td>${t.doenca}</td>
+        <td>${t.medicamento}</td>
+        <td>${fmtData(t.data_inicio)}</td>
+        <td>${fmtData(t.data_liberacao)}</td>
+        <td>${t.data_liberacao >= hoje ? '<span class="badge bg-warning">Em carência</span>' : '<span class="badge bg-success">Liberado</span>'}</td>
+      </tr>
+    `).join('');
+}
+
+document.getElementById('btnSalvarTratamento').addEventListener('click', async () => {
+  const animal_id = Number(document.getElementById('tAnimal').value);
+  const doenca = document.getElementById('tDoenca').value.trim();
+  const medicamento = document.getElementById('tMedicamento').value.trim();
+  if (!animal_id || !doenca || !medicamento) return;
+
+  await supabaseClient.from('topvacas_tratamentos').insert({
+    animal_id, doenca, medicamento,
+    data_inicio: document.getElementById('tDataInicio').value,
+    dias_aplicacao: parseInt(document.getElementById('tDias').value) || 1,
+    carencia_carne: parseInt(document.getElementById('tCarencia').value) || 0,
+  });
+  ['tDoenca', 'tMedicamento'].forEach(id => document.getElementById(id).value = '');
+  await carregarBase();
+});
+
+// ---------- Nutrição ----------
+document.getElementById('btnSalvarInsumo').addEventListener('click', async () => {
+  const nome = document.getElementById('iNome').value.trim();
+  if (!nome) return;
+  await supabaseClient.from('topvacas_insumos').insert({
+    nome,
+    unidade: document.getElementById('iUnidade').value.trim() || 'kg',
+    preco: parseFloat(document.getElementById('iPreco').value) || 0,
+  });
+  ['iNome', 'iPreco'].forEach(id => document.getElementById(id).value = '');
+  await carregarBase();
+});
+
+document.getElementById('btnSalvarMovimento').addEventListener('click', async () => {
+  const insumo_id = Number(document.getElementById('mInsumo').value);
+  const quantidade = parseFloat(document.getElementById('mQuantidade').value);
+  if (!insumo_id || isNaN(quantidade)) return;
+  await supabaseClient.from('topvacas_insumo_movimentos').insert({
+    insumo_id,
+    data: document.getElementById('mData').value,
+    tipo: document.getElementById('mTipo').value,
+    quantidade,
+    valor_unitario: parseFloat(document.getElementById('mValorUnitario').value) || null,
+  });
+  document.getElementById('mQuantidade').value = '';
+  await carregarBase();
+});
+
+document.getElementById('btnSalvarDieta').addEventListener('click', async () => {
+  const lote_id = Number(document.getElementById('dLote').value);
+  const insumo_id = Number(document.getElementById('dInsumo').value);
+  const kg_cab_dia = parseFloat(document.getElementById('dKgCabDia').value);
+  if (!lote_id || !insumo_id || isNaN(kg_cab_dia)) return;
+  await supabaseClient.from('topvacas_dietas').upsert({ lote_id, insumo_id, kg_cab_dia }, { onConflict: 'lote_id,insumo_id' });
+  document.getElementById('dKgCabDia').value = '';
+  await carregarBase();
+});
+
+async function excluirDieta(id) {
+  await supabaseClient.from('topvacas_dietas').delete().eq('id', id);
+  await carregarBase();
+}
+
+function renderNutricao() {
+  document.getElementById('tbodyInsumos').innerHTML = INSUMOS.length === 0
+    ? '<tr class="empty-row"><td colspan="3">Nenhum insumo cadastrado.</td></tr>'
+    : INSUMOS.map(i => `<tr><td>${i.nome}</td><td style="text-align:right">${Number(i.estoque).toLocaleString('pt-BR')} ${i.unidade}</td><td style="text-align:right">${formatarMoeda(i.preco)}</td></tr>`).join('');
+
+  document.getElementById('tbodyDietas').innerHTML = DIETAS.length === 0
+    ? '<tr class="empty-row"><td colspan="4">Nenhuma dieta definida.</td></tr>'
+    : DIETAS.map(d => `
+      <tr>
+        <td>${nomeLote(d.lote_id)}</td>
+        <td>${(INSUMOS.find(i => i.id === d.insumo_id) || {}).nome || '—'}</td>
+        <td style="text-align:right">${d.kg_cab_dia}</td>
+        <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirDieta(${d.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>
+    `).join('');
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>
