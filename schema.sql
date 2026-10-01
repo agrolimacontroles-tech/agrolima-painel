@@ -700,20 +700,29 @@ on conflict (nome) do nothing;
 -- CONFINAMENTO — lotes de gado no cocho + volumoso (produção/estoque)
 -- ============================================================
 
+-- Catálogo de lotes/currais (reutilizável — não é criado um novo a cada entrada de gado)
 create table confinamento_lotes (
   id serial primary key,
-  identificacao text not null,
+  nome text not null unique,
+  observacao text,
+  ativo boolean not null default true
+);
+alter table confinamento_lotes disable row level security;
+
+create table confinamento_entradas (
+  id serial primary key,
+  lote_id int not null references confinamento_lotes(id),
   data_entrada date not null,
   quantidade_entrada int not null,
   peso_medio_entrada_kg numeric(6,1),
   observacao text,
   criado_em timestamptz not null default now()
 );
-alter table confinamento_lotes disable row level security;
+alter table confinamento_entradas disable row level security;
 
 create table confinamento_saidas (
   id bigserial primary key,
-  lote_id int not null references confinamento_lotes(id) on delete cascade,
+  entrada_id int not null references confinamento_entradas(id) on delete cascade,
   data date not null,
   quantidade int not null,
   peso_medio_kg numeric(6,1),

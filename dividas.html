@@ -93,6 +93,16 @@ document.getElementById('mainContent').innerHTML = `
 let EMPRESAS = [];
 
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
+function hojeBR() { return isoParaBR(hojeISO()); }
+function isoParaBR(iso) { const [a, m, d] = iso.split('-'); return `${d}/${m}/${a}`; }
+function brParaIso(br) {
+  const m = br.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const [, d, mes, a] = m;
+  const dia = Number(d), mesNum = Number(mes), ano = Number(a);
+  if (mesNum < 1 || mesNum > 12 || dia < 1 || dia > 31) return null;
+  return `${ano}-${String(mesNum).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
 
 async function carregarBase() {
   await checkAuth();
@@ -191,10 +201,10 @@ async function carregarLista() {
   const parcelasTodas = await buscarPaginado(() => supabaseClient.from('financiamento_parcelas').select('*'));
 
   document.getElementById('theadFinanciamentos').innerHTML = (mostrarEmpresa ? '<th>Empresa</th>' : '') +
-    '<th>Banco</th><th>Descrição</th><th style="text-align:right">Valor total</th><th style="text-align:right">Parcela</th><th style="text-align:right">Saldo devedor</th><th></th>';
+    '<th>Banco</th><th>Descrição</th><th style="text-align:right">Taxa a.a.</th><th style="text-align:right">Valor total</th><th style="text-align:right">Parcela</th><th style="text-align:right">Saldo devedor</th><th></th>';
 
   document.getElementById('tbodyFinanciamentos').innerHTML = (financiamentos || []).length === 0
-    ? `<tr class="empty-row"><td colspan="${mostrarEmpresa ? 7 : 6}">Nenhum financiamento cadastrado.</td></tr>`
+    ? `<tr class="empty-row"><td colspan="${mostrarEmpresa ? 8 : 7}">Nenhum financiamento cadastrado.</td></tr>`
     : financiamentos.map(f => {
       const parcelasDele = parcelasTodas.filter(p => p.financiamento_id === f.id);
       const saldoDevedor = parcelasDele.filter(p => !p.pago).reduce((s, p) => s + Number(p.valor), 0);
@@ -204,7 +214,8 @@ async function carregarLista() {
           ${mostrarEmpresa ? `<td>${nomeEmpresa(f.empresa_id)}</td>` : ''}
           <td>${f.banco}</td>
           <td>${f.descricao || '—'}</td>
-          <td style="text-align:right">${formatarMoeda(f.valor_total)}</td>
+          <td style="text-align:right">${f.taxa_juros_aa ? Number(f.taxa_juros_aa).toLocaleString('pt-BR') + '%' : '—'}</td>
+          <td style="text-align:right">${formatarMoeda(f.valor_total)} <button class="btn btn-secondary" style="padding:2px 6px" title="Alterar valor total" onclick="editarValorTotal(${f.id}, ${f.valor_total})"><i class="ti ti-pencil"></i></button></td>
           <td style="text-align:right">${formatarMoeda(valorParcela)}</td>
           <td style="text-align:right">${formatarMoeda(saldoDevedor)}</td>
           <td><button class="btn btn-secondary" style="padding:4px 10px" onclick="verParcelas(${f.id}, '${(f.banco + ' — ' + (f.descricao || '')).replace(/'/g, "\\'")}')"><i class="ti ti-eye"></i> Ver parcelas</button></td>
@@ -229,7 +240,7 @@ function verParcelas(financiamentoId, titulo) {
     <tr>
       <td>${p.numero}</td>
       <td>${new Date(p.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-      <td style="text-align:right">${formatarMoeda(p.valor)}</td>
+      <td style="text-align:right">${formatarMoeda(p.valor)} <button class="btn btn-secondary" style="padding:2px 6px" title="Alterar valor" onclick="editarValorParcela(${p.id}, ${financiamentoId}, '${titulo.replace(/'/g, "\\'")}', ${p.valor})"><i class="ti ti-pencil"></i></button></td>
       <td>${p.pago ? '<span class="badge bg-success">Paga</span>' : '<span class="badge bg-warning">Pendente</span>'}</td>
       <td>${!p.pago ? `<button class="btn btn-success" style="padding:4px 10px" onclick="marcarParcelaPaga(${p.id}, ${financiamentoId}, '${titulo.replace(/'/g, "\\'")}')"><i class="ti ti-check"></i></button>` : ''}</td>
     </tr>
@@ -238,15 +249,37 @@ function verParcelas(financiamentoId, titulo) {
 }
 
 async function marcarParcelaPaga(id, financiamentoId, titulo) {
-  const data_pagamento = prompt('Data do pagamento (AAAA-MM-DD):', hojeISO());
-  if (!data_pagamento) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data_pagamento)) {
-    alert('Data inválida. Use o formato AAAA-MM-DD, ex: 2026-06-15.');
+  const digitado = prompt('Data do pagamento (DD/MM/AAAA):', hojeBR());
+  if (!digitado) return;
+  const data_pagamento = brParaIso(digitado);
+  if (!data_pagamento) {
+    alert('Data inválida. Use o formato DD/MM/AAAA, ex: 22/10/2026.');
     return;
   }
   await supabaseClient.from('financiamento_parcelas').update({ pago: true, data_pagamento }).eq('id', id);
   await carregarLista();
   verParcelas(financiamentoId, titulo);
+}
+
+async function editarValorParcela(id, financiamentoId, titulo, valorAtual) {
+  const digitado = prompt('Novo valor da parcela:', valorAtual);
+  if (digitado === null) return;
+  const novoValor = parseFloat(digitado.replace(',', '.'));
+  if (isNaN(novoValor) || novoValor <= 0) { alert('Valor inválido.'); return; }
+  if (!confirm(`Alterar o valor dessa parcela de ${formatarMoeda(valorAtual)} para ${formatarMoeda(novoValor)}?`)) return;
+  await supabaseClient.from('financiamento_parcelas').update({ valor: novoValor }).eq('id', id);
+  await carregarLista();
+  verParcelas(financiamentoId, titulo);
+}
+
+async function editarValorTotal(id, valorAtual) {
+  const digitado = prompt('Novo valor total do financiamento:', valorAtual);
+  if (digitado === null) return;
+  const novoValor = parseFloat(digitado.replace(',', '.'));
+  if (isNaN(novoValor) || novoValor <= 0) { alert('Valor inválido.'); return; }
+  if (!confirm(`Alterar o valor total desse financiamento de ${formatarMoeda(valorAtual)} para ${formatarMoeda(novoValor)}?`)) return;
+  await supabaseClient.from('financiamentos').update({ valor_total: novoValor }).eq('id', id);
+  await carregarLista();
 }
 
 carregarBase();

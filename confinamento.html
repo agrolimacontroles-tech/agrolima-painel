@@ -20,39 +20,64 @@ document.getElementById('mainContent').innerHTML = `
   <div class="pagehead">
     <div>
       <div class="pagetitle">Confinamento</div>
-      <div class="pagesub">Gado no cocho e volumoso (produção e estoque)</div>
+      <div class="pagesub">Lotes, gado no cocho e volumoso (produção e estoque)</div>
     </div>
   </div>
 
   <div class="subtoggle">
-    <button class="stbtn active" id="btnTabCocho" onclick="mostrarAba('cocho')">Gado no Cocho</button>
+    <button class="stbtn active" id="btnTabLotes" onclick="mostrarAba('lotes')">Lotes</button>
+    <button class="stbtn" id="btnTabCocho" onclick="mostrarAba('cocho')">Gado no Cocho</button>
     <button class="stbtn" id="btnTabVolumoso" onclick="mostrarAba('volumoso')">Volumoso</button>
   </div>
 
-  <div id="abaCocho">
-    <div class="metrics" id="metricasCocho"><div class="metric"><span class="spinner"></span></div></div>
-
+  <div id="abaLotes">
     <div class="card">
-      <div class="cardh"><i class="ti ti-plus"></i> Nova entrada de lote</div>
+      <div class="cardh"><i class="ti ti-plus"></i> Cadastrar lote</div>
       <div class="cardb">
         <div class="frow cols-3">
-          <div class="fgroup"><label>Identificação do lote</label><input type="text" id="lIdentificacao" placeholder="Lote 01"></div>
-          <div class="fgroup"><label>Data de entrada</label><input type="date" id="lDataEntrada"></div>
-          <div class="fgroup"><label>Quantidade (cabeças)</label><input type="number" id="lQuantidade" step="1"></div>
-          <div class="fgroup"><label>Peso médio de entrada (kg)</label><input type="number" id="lPesoMedio" step="0.1"></div>
-          <div class="fgroup full"><label>Observação</label><input type="text" id="lObservacao"></div>
+          <div class="fgroup"><label>Nome do lote</label><input type="text" id="lcNome" placeholder="Lote 01 / Curral A..."></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="lcObservacao"></div>
         </div>
-        <button class="btn btn-primary" id="btnSalvarLote"><i class="ti ti-check"></i> Registrar entrada</button>
-        <span id="msgLote" class="msg" style="display:inline-block;margin-left:10px"></span>
+        <button class="btn btn-primary" id="btnSalvarLoteCadastro"><i class="ti ti-check"></i> Cadastrar</button>
+        <span id="msgLoteCadastro" class="msg" style="display:inline-block;margin-left:10px"></span>
       </div>
     </div>
 
     <div class="card">
-      <div class="cardh">Lotes em confinamento</div>
+      <div class="cardh">Lotes cadastrados</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Nome</th><th>Observação</th><th>Status</th><th></th></tr></thead>
+          <tbody id="tbodyLotesCadastro"><tr class="empty-row"><td colspan="4"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaCocho" style="display:none">
+    <div class="metrics" id="metricasCocho"><div class="metric"><span class="spinner"></span></div></div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Nova entrada de gado</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Lote</label><select id="eLote"></select></div>
+          <div class="fgroup"><label>Data de entrada</label><input type="date" id="eDataEntrada"></div>
+          <div class="fgroup"><label>Quantidade (cabeças)</label><input type="number" id="eQuantidade" step="1"></div>
+          <div class="fgroup"><label>Peso médio de entrada (kg)</label><input type="number" id="ePesoMedio" step="0.1"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="eObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarEntrada"><i class="ti ti-check"></i> Registrar entrada</button>
+        <span id="msgEntrada" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh">Entradas em confinamento</div>
       <div class="cardb table-wrap">
         <table>
           <thead><tr><th>Lote</th><th>Entrada</th><th style="text-align:right">Cabeças entrada</th><th style="text-align:right">Peso médio entrada</th><th style="text-align:right">No cocho agora</th><th>Status</th><th></th></tr></thead>
-          <tbody id="tbodyLotes"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+          <tbody id="tbodyEntradas"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -123,35 +148,39 @@ document.getElementById('mainContent').innerHTML = `
   </div>
 `;
 
-let LOTES = [], SAIDAS = [], VOLUMOSOS = [], MOVIMENTOS_VOLUMOSO = [];
+let LOTES_CADASTRO = [], ENTRADAS = [], SAIDAS = [], VOLUMOSOS = [], MOVIMENTOS_VOLUMOSO = [];
 
 function hojeISO() { return new Date().toISOString().slice(0, 10); }
 function fmtData(d) { return d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—'; }
 
 function mostrarAba(aba) {
-  document.getElementById('abaCocho').style.display = aba === 'cocho' ? '' : 'none';
-  document.getElementById('abaVolumoso').style.display = aba === 'volumoso' ? '' : 'none';
-  document.getElementById('btnTabCocho').classList.toggle('active', aba === 'cocho');
-  document.getElementById('btnTabVolumoso').classList.toggle('active', aba === 'volumoso');
+  ['lotes', 'cocho', 'volumoso'].forEach(a => {
+    document.getElementById('aba' + a[0].toUpperCase() + a.slice(1)).style.display = a === aba ? '' : 'none';
+    document.getElementById('btnTab' + a[0].toUpperCase() + a.slice(1)).classList.toggle('active', a === aba);
+  });
 }
 
 async function carregarBase() {
   await checkAuth();
   showUserEmail();
 
-  document.getElementById('lDataEntrada').value = hojeISO();
+  document.getElementById('eDataEntrada').value = hojeISO();
   document.getElementById('mData').value = hojeISO();
 
-  const [lotes, saidas, volumosos, movimentos] = await Promise.all([
-    buscarPaginado(() => supabaseClient.from('confinamento_lotes').select('*').order('data_entrada', { ascending: false })),
+  const [lotesCadastro, entradas, saidas, volumosos, movimentos] = await Promise.all([
+    supabaseClient.from('confinamento_lotes').select('*').order('nome').then(r => r.data || []),
+    buscarPaginado(() => supabaseClient.from('confinamento_entradas').select('*').order('data_entrada', { ascending: false })),
     buscarPaginado(() => supabaseClient.from('confinamento_saidas').select('*').order('data', { ascending: false })),
     supabaseClient.from('confinamento_volumoso').select('*').eq('ativo', true).order('nome').then(r => r.data || []),
     buscarPaginado(() => supabaseClient.from('confinamento_volumoso_movimentos').select('*').order('data', { ascending: false })),
   ]);
-  LOTES = lotes; SAIDAS = saidas; VOLUMOSOS = volumosos; MOVIMENTOS_VOLUMOSO = movimentos;
+  LOTES_CADASTRO = lotesCadastro; ENTRADAS = entradas; SAIDAS = saidas; VOLUMOSOS = volumosos; MOVIMENTOS_VOLUMOSO = movimentos;
 
+  document.getElementById('eLote').innerHTML = LOTES_CADASTRO.filter(l => l.ativo).map(l => `<option value="${l.id}">${l.nome}</option>`).join('')
+    || '<option value="">Cadastre um lote primeiro</option>';
   document.getElementById('mVolumoso').innerHTML = VOLUMOSOS.map(v => `<option value="${v.id}">${v.nome}</option>`).join('');
 
+  renderLotesCadastro();
   renderCocho();
   renderVolumoso();
 
@@ -159,74 +188,125 @@ async function carregarBase() {
   if (abaUrl) mostrarAba(abaUrl);
 }
 
-// ---------- Gado no cocho ----------
-function quantidadeSaidaDoLote(loteId) {
-  return SAIDAS.filter(s => s.lote_id === loteId).reduce((s, x) => s + x.quantidade, 0);
-}
-function nomeLote(id) { return (LOTES.find(l => l.id === id) || {}).identificacao || '—'; }
-
-document.getElementById('btnSalvarLote').addEventListener('click', async () => {
-  const identificacao = document.getElementById('lIdentificacao').value.trim();
-  const quantidade = parseInt(document.getElementById('lQuantidade').value);
-  const msg = document.getElementById('msgLote');
-  if (!identificacao || !quantidade) {
-    msg.textContent = 'Preencha a identificação e a quantidade.';
-    msg.className = 'msg show error';
-    return;
-  }
+// ---------- Lotes (cadastro) ----------
+document.getElementById('btnSalvarLoteCadastro').addEventListener('click', async () => {
+  const nome = document.getElementById('lcNome').value.trim();
+  const msg = document.getElementById('msgLoteCadastro');
+  if (!nome) { msg.textContent = 'Informe o nome do lote.'; msg.className = 'msg show error'; return; }
   const { error } = await supabaseClient.from('confinamento_lotes').insert({
-    identificacao,
-    data_entrada: document.getElementById('lDataEntrada').value,
-    quantidade_entrada: quantidade,
-    peso_medio_entrada_kg: parseFloat(document.getElementById('lPesoMedio').value) || null,
-    observacao: document.getElementById('lObservacao').value.trim() || null,
+    nome, observacao: document.getElementById('lcObservacao').value.trim() || null,
   });
   if (error) { msg.textContent = 'Erro: ' + error.message; msg.className = 'msg show error'; return; }
-  msg.textContent = 'Lote registrado!'; msg.className = 'msg show success';
-  ['lIdentificacao', 'lQuantidade', 'lPesoMedio', 'lObservacao'].forEach(id => document.getElementById(id).value = '');
+  msg.textContent = 'Lote cadastrado!'; msg.className = 'msg show success';
+  ['lcNome', 'lcObservacao'].forEach(id => document.getElementById(id).value = '');
   await carregarBase();
   setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
 });
 
-async function registrarSaida(loteId) {
-  const restante = LOTES.find(l => l.id === loteId).quantidade_entrada - quantidadeSaidaDoLote(loteId);
-  const quantidade = parseInt(prompt(`Quantas cabeças saem agora? (restam ${restante} no lote)`, restante));
+async function editarLoteCadastro(id) {
+  const lote = LOTES_CADASTRO.find(l => l.id === id);
+  const novoNome = prompt('Nome do lote:', lote.nome);
+  if (novoNome === null || !novoNome.trim()) return;
+  const novaObs = prompt('Observação:', lote.observacao || '');
+  await supabaseClient.from('confinamento_lotes').update({ nome: novoNome.trim(), observacao: (novaObs || '').trim() || null }).eq('id', id);
+  await carregarBase();
+}
+
+async function alternarAtivoLote(id, ativo) {
+  await supabaseClient.from('confinamento_lotes').update({ ativo }).eq('id', id);
+  await carregarBase();
+}
+
+function renderLotesCadastro() {
+  document.getElementById('tbodyLotesCadastro').innerHTML = LOTES_CADASTRO.length === 0
+    ? '<tr class="empty-row"><td colspan="4">Nenhum lote cadastrado ainda.</td></tr>'
+    : LOTES_CADASTRO.map(l => `
+      <tr>
+        <td><b>${l.nome}</b></td>
+        <td>${l.observacao || '—'}</td>
+        <td>${l.ativo ? '<span class="badge bg-success">Ativo</span>' : '<span class="badge bg-warning">Pausado</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-secondary" style="padding:4px 10px" onclick="editarLoteCadastro(${l.id})"><i class="ti ti-pencil"></i></button>
+          ${l.ativo
+            ? `<button class="btn btn-secondary" style="padding:4px 10px" onclick="alternarAtivoLote(${l.id}, false)"><i class="ti ti-player-pause"></i></button>`
+            : `<button class="btn btn-success" style="padding:4px 10px" onclick="alternarAtivoLote(${l.id}, true)"><i class="ti ti-player-play"></i></button>`}
+        </td>
+      </tr>
+    `).join('');
+}
+
+// ---------- Gado no cocho ----------
+function quantidadeSaidaDaEntrada(entradaId) {
+  return SAIDAS.filter(s => s.entrada_id === entradaId).reduce((s, x) => s + x.quantidade, 0);
+}
+function nomeLoteDaEntrada(entradaId) {
+  const e = ENTRADAS.find(x => x.id === entradaId);
+  return e ? nomeLote(e.lote_id) : '—';
+}
+function nomeLote(loteId) { return (LOTES_CADASTRO.find(l => l.id === loteId) || {}).nome || '—'; }
+
+document.getElementById('btnSalvarEntrada').addEventListener('click', async () => {
+  const lote_id = Number(document.getElementById('eLote').value);
+  const quantidade_entrada = parseInt(document.getElementById('eQuantidade').value);
+  const msg = document.getElementById('msgEntrada');
+  if (!lote_id || !quantidade_entrada) {
+    msg.textContent = 'Escolha o lote e informe a quantidade.';
+    msg.className = 'msg show error';
+    return;
+  }
+  const { error } = await supabaseClient.from('confinamento_entradas').insert({
+    lote_id,
+    data_entrada: document.getElementById('eDataEntrada').value,
+    quantidade_entrada,
+    peso_medio_entrada_kg: parseFloat(document.getElementById('ePesoMedio').value) || null,
+    observacao: document.getElementById('eObservacao').value.trim() || null,
+  });
+  if (error) { msg.textContent = 'Erro: ' + error.message; msg.className = 'msg show error'; return; }
+  msg.textContent = 'Entrada registrada!'; msg.className = 'msg show success';
+  ['eQuantidade', 'ePesoMedio', 'eObservacao'].forEach(id => document.getElementById(id).value = '');
+  await carregarBase();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+async function registrarSaida(entradaId) {
+  const restante = ENTRADAS.find(e => e.id === entradaId).quantidade_entrada - quantidadeSaidaDaEntrada(entradaId);
+  const quantidade = parseInt(prompt(`Quantas cabeças saem agora? (restam ${restante})`, restante));
   if (!quantidade || quantidade <= 0) return;
-  if (quantidade > restante) { alert(`Esse lote só tem ${restante} cabeças restantes.`); return; }
+  if (quantidade > restante) { alert(`Essa entrada só tem ${restante} cabeças restantes.`); return; }
   const pesoMedio = parseFloat(prompt('Peso médio de saída (kg), opcional:') || '');
   const destino = prompt('Destino (venda, frigorífico, transferência...):') || null;
   await supabaseClient.from('confinamento_saidas').insert({
-    lote_id: loteId, data: hojeISO(), quantidade, peso_medio_kg: isNaN(pesoMedio) ? null : pesoMedio, destino,
+    entrada_id: entradaId, data: hojeISO(), quantidade, peso_medio_kg: isNaN(pesoMedio) ? null : pesoMedio, destino,
   });
   await carregarBase();
 }
 
 function renderCocho() {
-  const totalEntrada = LOTES.reduce((s, l) => s + l.quantidade_entrada, 0);
+  const totalEntrada = ENTRADAS.reduce((s, e) => s + e.quantidade_entrada, 0);
   const totalSaida = SAIDAS.reduce((s, x) => s + x.quantidade, 0);
   const noCochoAgora = totalEntrada - totalSaida;
-  const lotesAtivos = LOTES.filter(l => (l.quantidade_entrada - quantidadeSaidaDoLote(l.id)) > 0).length;
+  const entradasAtivas = ENTRADAS.filter(e => (e.quantidade_entrada - quantidadeSaidaDaEntrada(e.id)) > 0).length;
 
   document.getElementById('metricasCocho').innerHTML = `
     <div class="metric"><div class="micon bg-info"><i class="ti ti-tag"></i></div><div><div class="mlabel">Gado no cocho agora</div><div class="mval">${noCochoAgora}</div></div></div>
-    <div class="metric"><div class="micon bg-info"><i class="ti ti-stack-2"></i></div><div><div class="mlabel">Lotes ativos</div><div class="mval">${lotesAtivos}</div></div></div>
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-stack-2"></i></div><div><div class="mlabel">Entradas ativas</div><div class="mval">${entradasAtivas}</div></div></div>
     <div class="metric"><div class="micon bg-success"><i class="ti ti-login"></i></div><div><div class="mlabel">Total já entrou</div><div class="mval">${totalEntrada}</div></div></div>
     <div class="metric"><div class="micon bg-warning"><i class="ti ti-logout"></i></div><div><div class="mlabel">Total já saiu</div><div class="mval">${totalSaida}</div></div></div>
   `;
 
-  document.getElementById('tbodyLotes').innerHTML = LOTES.length === 0
-    ? '<tr class="empty-row"><td colspan="7">Nenhum lote registrado ainda.</td></tr>'
-    : LOTES.map(l => {
-      const restante = l.quantidade_entrada - quantidadeSaidaDoLote(l.id);
+  document.getElementById('tbodyEntradas').innerHTML = ENTRADAS.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhuma entrada registrada ainda.</td></tr>'
+    : ENTRADAS.map(e => {
+      const restante = e.quantidade_entrada - quantidadeSaidaDaEntrada(e.id);
       return `
         <tr>
-          <td><b>${l.identificacao}</b></td>
-          <td>${fmtData(l.data_entrada)}</td>
-          <td style="text-align:right">${l.quantidade_entrada}</td>
-          <td style="text-align:right">${l.peso_medio_entrada_kg ? l.peso_medio_entrada_kg + ' kg' : '—'}</td>
+          <td><b>${nomeLote(e.lote_id)}</b></td>
+          <td>${fmtData(e.data_entrada)}</td>
+          <td style="text-align:right">${e.quantidade_entrada}</td>
+          <td style="text-align:right">${e.peso_medio_entrada_kg ? e.peso_medio_entrada_kg + ' kg' : '—'}</td>
           <td style="text-align:right;font-weight:600">${restante}</td>
           <td>${restante > 0 ? '<span class="badge bg-info">Ativo</span>' : '<span class="badge bg-success">Encerrado</span>'}</td>
-          <td>${restante > 0 ? `<button class="btn btn-secondary" style="padding:4px 10px" onclick="registrarSaida(${l.id})"><i class="ti ti-logout"></i> Saída</button>` : ''}</td>
+          <td>${restante > 0 ? `<button class="btn btn-secondary" style="padding:4px 10px" onclick="registrarSaida(${e.id})"><i class="ti ti-logout"></i> Saída</button>` : ''}</td>
         </tr>
       `;
     }).join('');
@@ -236,7 +316,7 @@ function renderCocho() {
     : SAIDAS.map(s => `
       <tr>
         <td>${fmtData(s.data)}</td>
-        <td>${nomeLote(s.lote_id)}</td>
+        <td>${nomeLoteDaEntrada(s.entrada_id)}</td>
         <td style="text-align:right">${s.quantidade}</td>
         <td style="text-align:right">${s.peso_medio_kg ? s.peso_medio_kg + ' kg' : '—'}</td>
         <td>${s.destino || '—'}</td>

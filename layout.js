@@ -14,6 +14,7 @@ const MENU_ADMINISTRATIVO = [
   { page: 'lancamentos', label: 'Lançamentos',   icon: 'ti-cash-banknote' },
   { page: 'funcionarios', label: 'Funcionários', icon: 'ti-users' },
   { page: 'contaspagar', label: 'Contas a pagar', icon: 'ti-file-invoice' },
+  { page: 'todasdividas', label: 'Todas Dívidas', icon: 'ti-percentage' },
   { page: 'fluxocaixa',  label: 'Fluxo Consolidado', icon: 'ti-chart-line', href: () => 'fluxocaixa.html' },
   { page: 'calculadora', label: 'Calculadora',   icon: 'ti-calculator' },
 ];
