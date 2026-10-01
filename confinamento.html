@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Confinamento</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('confinamento');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Confinamento</div>
+      <div class="pagesub">Gado no cocho e volumoso (produção e estoque)</div>
+    </div>
+  </div>
+
+  <div class="subtoggle">
+    <button class="stbtn active" id="btnTabCocho" onclick="mostrarAba('cocho')">Gado no Cocho</button>
+    <button class="stbtn" id="btnTabVolumoso" onclick="mostrarAba('volumoso')">Volumoso</button>
+  </div>
+
+  <div id="abaCocho">
+    <div class="metrics" id="metricasCocho"><div class="metric"><span class="spinner"></span></div></div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Nova entrada de lote</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Identificação do lote</label><input type="text" id="lIdentificacao" placeholder="Lote 01"></div>
+          <div class="fgroup"><label>Data de entrada</label><input type="date" id="lDataEntrada"></div>
+          <div class="fgroup"><label>Quantidade (cabeças)</label><input type="number" id="lQuantidade" step="1"></div>
+          <div class="fgroup"><label>Peso médio de entrada (kg)</label><input type="number" id="lPesoMedio" step="0.1"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="lObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarLote"><i class="ti ti-check"></i> Registrar entrada</button>
+        <span id="msgLote" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh">Lotes em confinamento</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Lote</th><th>Entrada</th><th style="text-align:right">Cabeças entrada</th><th style="text-align:right">Peso médio entrada</th><th style="text-align:right">No cocho agora</th><th>Status</th><th></th></tr></thead>
+          <tbody id="tbodyLotes"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh">Histórico de saídas</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Lote</th><th style="text-align:right">Quantidade</th><th style="text-align:right">Peso médio</th><th>Destino</th></tr></thead>
+          <tbody id="tbodySaidas"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="abaVolumoso" style="display:none">
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Cadastrar tipo de volumoso</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Nome</label><input type="text" id="vNome" placeholder="Silagem de milho"></div>
+          <div class="fgroup"><label>Unidade</label><input type="text" id="vUnidade" value="kg"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarVolumoso"><i class="ti ti-check"></i> Cadastrar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh">Estoque de volumoso</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Tipo</th><th style="text-align:right">Estoque atual</th></tr></thead>
+          <tbody id="tbodyVolumosoEstoque"><tr class="empty-row"><td colspan="2"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh"><i class="ti ti-plus"></i> Lançar produção / consumo</div>
+      <div class="cardb">
+        <div class="frow cols-3">
+          <div class="fgroup"><label>Tipo de volumoso</label><select id="mVolumoso"></select></div>
+          <div class="fgroup"><label>Movimento</label>
+            <select id="mTipoMov">
+              <option value="producao">Produção (entrada)</option>
+              <option value="consumo">Consumo (saída)</option>
+              <option value="ajuste">Ajuste (novo saldo)</option>
+            </select>
+          </div>
+          <div class="fgroup"><label>Quantidade</label><input type="number" id="mQuantidade" step="0.01"></div>
+          <div class="fgroup"><label>Data</label><input type="date" id="mData"></div>
+          <div class="fgroup full"><label>Observação</label><input type="text" id="mObservacao"></div>
+        </div>
+        <button class="btn btn-primary" id="btnSalvarMovVolumoso"><i class="ti ti-check"></i> Registrar</button>
+        <span id="msgMovVolumoso" class="msg" style="display:inline-block;margin-left:10px"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardh">Movimentos</div>
+      <div class="cardb table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Tipo</th><th>Movimento</th><th style="text-align:right">Quantidade</th><th>Observação</th></tr></thead>
+          <tbody id="tbodyMovimentosVolumoso"><tr class="empty-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+`;
+
+let LOTES = [], SAIDAS = [], VOLUMOSOS = [], MOVIMENTOS_VOLUMOSO = [];
+
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+function fmtData(d) { return d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—'; }
+
+function mostrarAba(aba) {
+  document.getElementById('abaCocho').style.display = aba === 'cocho' ? '' : 'none';
+  document.getElementById('abaVolumoso').style.display = aba === 'volumoso' ? '' : 'none';
+  document.getElementById('btnTabCocho').classList.toggle('active', aba === 'cocho');
+  document.getElementById('btnTabVolumoso').classList.toggle('active', aba === 'volumoso');
+}
+
+async function carregarBase() {
+  await checkAuth();
+  showUserEmail();
+
+  document.getElementById('lDataEntrada').value = hojeISO();
+  document.getElementById('mData').value = hojeISO();
+
+  const [lotes, saidas, volumosos, movimentos] = await Promise.all([
+    buscarPaginado(() => supabaseClient.from('confinamento_lotes').select('*').order('data_entrada', { ascending: false })),
+    buscarPaginado(() => supabaseClient.from('confinamento_saidas').select('*').order('data', { ascending: false })),
+    supabaseClient.from('confinamento_volumoso').select('*').eq('ativo', true).order('nome').then(r => r.data || []),
+    buscarPaginado(() => supabaseClient.from('confinamento_volumoso_movimentos').select('*').order('data', { ascending: false })),
+  ]);
+  LOTES = lotes; SAIDAS = saidas; VOLUMOSOS = volumosos; MOVIMENTOS_VOLUMOSO = movimentos;
+
+  document.getElementById('mVolumoso').innerHTML = VOLUMOSOS.map(v => `<option value="${v.id}">${v.nome}</option>`).join('');
+
+  renderCocho();
+  renderVolumoso();
+
+  const abaUrl = new URLSearchParams(location.search).get('aba');
+  if (abaUrl) mostrarAba(abaUrl);
+}
+
+// ---------- Gado no cocho ----------
+function quantidadeSaidaDoLote(loteId) {
+  return SAIDAS.filter(s => s.lote_id === loteId).reduce((s, x) => s + x.quantidade, 0);
+}
+function nomeLote(id) { return (LOTES.find(l => l.id === id) || {}).identificacao || '—'; }
+
+document.getElementById('btnSalvarLote').addEventListener('click', async () => {
+  const identificacao = document.getElementById('lIdentificacao').value.trim();
+  const quantidade = parseInt(document.getElementById('lQuantidade').value);
+  const msg = document.getElementById('msgLote');
+  if (!identificacao || !quantidade) {
+    msg.textContent = 'Preencha a identificação e a quantidade.';
+    msg.className = 'msg show error';
+    return;
+  }
+  const { error } = await supabaseClient.from('confinamento_lotes').insert({
+    identificacao,
+    data_entrada: document.getElementById('lDataEntrada').value,
+    quantidade_entrada: quantidade,
+    peso_medio_entrada_kg: parseFloat(document.getElementById('lPesoMedio').value) || null,
+    observacao: document.getElementById('lObservacao').value.trim() || null,
+  });
+  if (error) { msg.textContent = 'Erro: ' + error.message; msg.className = 'msg show error'; return; }
+  msg.textContent = 'Lote registrado!'; msg.className = 'msg show success';
+  ['lIdentificacao', 'lQuantidade', 'lPesoMedio', 'lObservacao'].forEach(id => document.getElementById(id).value = '');
+  await carregarBase();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+async function registrarSaida(loteId) {
+  const restante = LOTES.find(l => l.id === loteId).quantidade_entrada - quantidadeSaidaDoLote(loteId);
+  const quantidade = parseInt(prompt(`Quantas cabeças saem agora? (restam ${restante} no lote)`, restante));
+  if (!quantidade || quantidade <= 0) return;
+  if (quantidade > restante) { alert(`Esse lote só tem ${restante} cabeças restantes.`); return; }
+  const pesoMedio = parseFloat(prompt('Peso médio de saída (kg), opcional:') || '');
+  const destino = prompt('Destino (venda, frigorífico, transferência...):') || null;
+  await supabaseClient.from('confinamento_saidas').insert({
+    lote_id: loteId, data: hojeISO(), quantidade, peso_medio_kg: isNaN(pesoMedio) ? null : pesoMedio, destino,
+  });
+  await carregarBase();
+}
+
+function renderCocho() {
+  const totalEntrada = LOTES.reduce((s, l) => s + l.quantidade_entrada, 0);
+  const totalSaida = SAIDAS.reduce((s, x) => s + x.quantidade, 0);
+  const noCochoAgora = totalEntrada - totalSaida;
+  const lotesAtivos = LOTES.filter(l => (l.quantidade_entrada - quantidadeSaidaDoLote(l.id)) > 0).length;
+
+  document.getElementById('metricasCocho').innerHTML = `
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-tag"></i></div><div><div class="mlabel">Gado no cocho agora</div><div class="mval">${noCochoAgora}</div></div></div>
+    <div class="metric"><div class="micon bg-info"><i class="ti ti-stack-2"></i></div><div><div class="mlabel">Lotes ativos</div><div class="mval">${lotesAtivos}</div></div></div>
+    <div class="metric"><div class="micon bg-success"><i class="ti ti-login"></i></div><div><div class="mlabel">Total já entrou</div><div class="mval">${totalEntrada}</div></div></div>
+    <div class="metric"><div class="micon bg-warning"><i class="ti ti-logout"></i></div><div><div class="mlabel">Total já saiu</div><div class="mval">${totalSaida}</div></div></div>
+  `;
+
+  document.getElementById('tbodyLotes').innerHTML = LOTES.length === 0
+    ? '<tr class="empty-row"><td colspan="7">Nenhum lote registrado ainda.</td></tr>'
+    : LOTES.map(l => {
+      const restante = l.quantidade_entrada - quantidadeSaidaDoLote(l.id);
+      return `
+        <tr>
+          <td><b>${l.identificacao}</b></td>
+          <td>${fmtData(l.data_entrada)}</td>
+          <td style="text-align:right">${l.quantidade_entrada}</td>
+          <td style="text-align:right">${l.peso_medio_entrada_kg ? l.peso_medio_entrada_kg + ' kg' : '—'}</td>
+          <td style="text-align:right;font-weight:600">${restante}</td>
+          <td>${restante > 0 ? '<span class="badge bg-info">Ativo</span>' : '<span class="badge bg-success">Encerrado</span>'}</td>
+          <td>${restante > 0 ? `<button class="btn btn-secondary" style="padding:4px 10px" onclick="registrarSaida(${l.id})"><i class="ti ti-logout"></i> Saída</button>` : ''}</td>
+        </tr>
+      `;
+    }).join('');
+
+  document.getElementById('tbodySaidas').innerHTML = SAIDAS.length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhuma saída registrada ainda.</td></tr>'
+    : SAIDAS.map(s => `
+      <tr>
+        <td>${fmtData(s.data)}</td>
+        <td>${nomeLote(s.lote_id)}</td>
+        <td style="text-align:right">${s.quantidade}</td>
+        <td style="text-align:right">${s.peso_medio_kg ? s.peso_medio_kg + ' kg' : '—'}</td>
+        <td>${s.destino || '—'}</td>
+      </tr>
+    `).join('');
+}
+
+// ---------- Volumoso ----------
+document.getElementById('btnSalvarVolumoso').addEventListener('click', async () => {
+  const nome = document.getElementById('vNome').value.trim();
+  if (!nome) return;
+  await supabaseClient.from('confinamento_volumoso').insert({ nome, unidade: document.getElementById('vUnidade').value.trim() || 'kg' });
+  ['vNome'].forEach(id => document.getElementById(id).value = '');
+  await carregarBase();
+});
+
+document.getElementById('btnSalvarMovVolumoso').addEventListener('click', async () => {
+  const volumoso_id = Number(document.getElementById('mVolumoso').value);
+  const quantidade = parseFloat(document.getElementById('mQuantidade').value);
+  const msg = document.getElementById('msgMovVolumoso');
+  if (!volumoso_id || isNaN(quantidade)) {
+    msg.textContent = 'Escolha o tipo de volumoso e a quantidade.';
+    msg.className = 'msg show error';
+    return;
+  }
+  await supabaseClient.from('confinamento_volumoso_movimentos').insert({
+    volumoso_id,
+    data: document.getElementById('mData').value,
+    tipo: document.getElementById('mTipoMov').value,
+    quantidade,
+    observacao: document.getElementById('mObservacao').value.trim() || null,
+  });
+  msg.textContent = 'Movimento registrado!'; msg.className = 'msg show success';
+  ['mQuantidade', 'mObservacao'].forEach(id => document.getElementById(id).value = '');
+  await carregarBase();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
+});
+
+function renderVolumoso() {
+  document.getElementById('tbodyVolumosoEstoque').innerHTML = VOLUMOSOS.length === 0
+    ? '<tr class="empty-row"><td colspan="2">Nenhum tipo de volumoso cadastrado.</td></tr>'
+    : VOLUMOSOS.map(v => `<tr><td>${v.nome}</td><td style="text-align:right">${Number(v.estoque_atual).toLocaleString('pt-BR')} ${v.unidade}</td></tr>`).join('');
+
+  const labelMov = { producao: '<span class="badge bg-success">Produção</span>', consumo: '<span class="badge bg-danger">Consumo</span>', ajuste: '<span class="badge bg-info">Ajuste</span>' };
+  document.getElementById('tbodyMovimentosVolumoso').innerHTML = MOVIMENTOS_VOLUMOSO.length === 0
+    ? '<tr class="empty-row"><td colspan="5">Nenhum movimento registrado ainda.</td></tr>'
+    : MOVIMENTOS_VOLUMOSO.map(m => `
+      <tr>
+        <td>${fmtData(m.data)}</td>
+        <td>${(VOLUMOSOS.find(v => v.id === m.volumoso_id) || {}).nome || '—'}</td>
+        <td>${labelMov[m.tipo] || m.tipo}</td>
+        <td style="text-align:right">${m.quantidade}</td>
+        <td>${m.observacao || '—'}</td>
+      </tr>
+    `).join('');
+}
+
+carregarBase();
+</script>
+
+</body>
+</html>

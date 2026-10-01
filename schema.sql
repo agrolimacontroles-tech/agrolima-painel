@@ -696,3 +696,72 @@ insert into topvacas_manejos_sanitarios (nome, grupo, frequencia_dias) values
   ('Controle de carrapato', 'Todo o rebanho', 21)
 on conflict (nome) do nothing;
 
+-- ============================================================
+-- CONFINAMENTO — lotes de gado no cocho + volumoso (produção/estoque)
+-- ============================================================
+
+create table confinamento_lotes (
+  id serial primary key,
+  identificacao text not null,
+  data_entrada date not null,
+  quantidade_entrada int not null,
+  peso_medio_entrada_kg numeric(6,1),
+  observacao text,
+  criado_em timestamptz not null default now()
+);
+alter table confinamento_lotes disable row level security;
+
+create table confinamento_saidas (
+  id bigserial primary key,
+  lote_id int not null references confinamento_lotes(id) on delete cascade,
+  data date not null,
+  quantidade int not null,
+  peso_medio_kg numeric(6,1),
+  destino text,
+  observacao text
+);
+alter table confinamento_saidas disable row level security;
+
+create table confinamento_volumoso (
+  id serial primary key,
+  nome text not null unique,
+  unidade text not null default 'kg',
+  estoque_atual numeric(12,2) not null default 0,
+  ativo boolean not null default true
+);
+alter table confinamento_volumoso disable row level security;
+
+create table confinamento_volumoso_movimentos (
+  id bigserial primary key,
+  volumoso_id int not null references confinamento_volumoso(id) on delete cascade,
+  data date not null,
+  tipo text not null check (tipo in ('producao', 'consumo', 'ajuste')),
+  quantidade numeric(12,2) not null,
+  observacao text
+);
+alter table confinamento_volumoso_movimentos disable row level security;
+
+create or replace function confinamento_atualiza_estoque_volumoso() returns trigger language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.tipo = 'producao' then
+      update confinamento_volumoso set estoque_atual = estoque_atual + new.quantidade where id = new.volumoso_id;
+    elsif new.tipo = 'consumo' then
+      update confinamento_volumoso set estoque_atual = estoque_atual - new.quantidade where id = new.volumoso_id;
+    else
+      update confinamento_volumoso set estoque_atual = new.quantidade where id = new.volumoso_id;
+    end if;
+    return new;
+  elsif tg_op = 'DELETE' then
+    if old.tipo = 'producao' then
+      update confinamento_volumoso set estoque_atual = estoque_atual - old.quantidade where id = old.volumoso_id;
+    elsif old.tipo = 'consumo' then
+      update confinamento_volumoso set estoque_atual = estoque_atual + old.quantidade where id = old.volumoso_id;
+    end if;
+    return old;
+  end if;
+  return null;
+end $$;
+create trigger trg_confinamento_estoque_volumoso after insert or delete on confinamento_volumoso_movimentos
+  for each row execute function confinamento_atualiza_estoque_volumoso();
+
