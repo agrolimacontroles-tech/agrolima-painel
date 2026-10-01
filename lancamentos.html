@@ -93,7 +93,7 @@ document.getElementById('mainContent').innerHTML = `
   <div class="card">
     <div class="cardb table-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Tipo</th><th>Conta</th><th>Histórico</th><th>Fornecedor/Comprador</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+        <thead><tr id="theadLancamentos"><th>Data</th><th>Tipo</th><th>Conta</th><th>Histórico</th><th>Fornecedor/Comprador</th><th style="text-align:right">Valor</th><th></th></tr></thead>
         <tbody id="tbodyLancamentos"><tr class="empty-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
       </table>
     </div>
@@ -221,6 +221,11 @@ function tipoConta(conta_id) {
   return c ? c.tipo : '';
 }
 
+function nomeEmpresa(id) {
+  const e = EMPRESAS.find(e => e.id === id);
+  return e ? e.nome : '—';
+}
+
 function labelTipo(tipo) {
   return { despesa: 'Despesa', investimento: 'Investimento', receita: 'Receita' }[tipo] || tipo;
 }
@@ -263,12 +268,18 @@ function renderResumo(dados) {
 
 function renderTabela(dados) {
   const tbody = document.getElementById('tbodyLancamentos');
+  const mostrarEmpresa = !document.getElementById('filtroEmpresa').value;
+
+  document.getElementById('theadLancamentos').innerHTML = (mostrarEmpresa ? '<th>Empresa</th>' : '') +
+    '<th>Data</th><th>Tipo</th><th>Conta</th><th>Histórico</th><th>Fornecedor/Comprador</th><th style="text-align:right">Valor</th><th></th>';
+
   if (dados.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Nenhum lançamento nesse período.</td></tr>';
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="${mostrarEmpresa ? 8 : 7}">Nenhum lançamento nesse período.</td></tr>`;
     return;
   }
   tbody.innerHTML = dados.map(l => `
     <tr>
+      ${mostrarEmpresa ? `<td>${nomeEmpresa(l.empresa_id)}</td>` : ''}
       <td>${new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
       <td>${labelTipo(tipoConta(l.conta_id))}</td>
       <td>${nomeConta(l.conta_id)}</td>
