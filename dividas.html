@@ -213,6 +213,12 @@ async function carregarLista() {
     }).join('');
 
   window._parcelasTodas = parcelasTodas;
+
+  const financiamentoUrl = new URLSearchParams(location.search).get('financiamento');
+  if (financiamentoUrl) {
+    const f = (financiamentos || []).find(x => String(x.id) === financiamentoUrl);
+    if (f) verParcelas(f.id, `${f.banco} — ${f.descricao || ''}`);
+  }
 }
 
 function verParcelas(financiamentoId, titulo) {

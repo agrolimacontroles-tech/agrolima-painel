@@ -172,11 +172,12 @@ function montarAtencao({ contasPagar, parcelas, maquinas, usosMaquina, manutenco
   parcelas.forEach(p => {
     const dias = diasEntre(p.vencimento, hoje);
     const banco = p.financiamentos ? p.financiamentos.banco : 'Financiamento';
+    const empresaId = p.financiamentos ? p.financiamentos.empresa_id : null;
     classificar(dias, {
       titulo: `${banco} — ${p.financiamentos && p.financiamentos.descricao ? p.financiamentos.descricao : 'parcela'}`,
       detalhe: dias < 0 ? `Vencida há ${-dias} dia(s)` : dias === 0 ? 'Vence hoje' : `Vence em ${dias} dia(s)`,
       valor: formatarMoeda(p.valor),
-      link: 'dividas.html',
+      link: `dividas.html?empresa=${empresaId}&financiamento=${p.financiamento_id}`,
     });
   });
 
