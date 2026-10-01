@@ -143,7 +143,7 @@ async function carregarFluxo() {
   }
 
   const chave = (ano, mes) => `${ano}-${String(mes).padStart(2, '0')}`;
-  const porMes = new Map(meses.map(m => [chave(m.ano, m.mes), { receitas: 0, saidasRealizadas: 0, saidasPrevistas: 0 }]));
+  const porMes = new Map(meses.map(m => [chave(m.ano, m.mes), { receitas: 0, despesas: 0, investimentos: 0 }]));
 
   lancamentos.forEach(l => {
     const d = new Date(l.data + 'T00:00:00');
@@ -151,8 +151,10 @@ async function carregarFluxo() {
     const registro = porMes.get(k);
     if (!registro) return;
     const tipo = tipoPorConta.get(l.conta_id);
-    if (tipo === 'receita') registro.receitas += Number(l.valor_total) || 0;
-    else registro.saidasRealizadas += Number(l.valor_total) || 0;
+    const valor = Number(l.valor_total) || 0;
+    if (tipo === 'receita') registro.receitas += valor;
+    else if (tipo === 'investimento') registro.investimentos += valor;
+    else registro.despesas += valor;
   });
 
   const mesAtualNum = hoje.getFullYear() * 12 + hoje.getMonth();
@@ -186,7 +188,8 @@ async function carregarFluxo() {
     const k = chave(m.ano, m.mes);
     const r = porMes.get(k);
     const futuro = (m.ano * 12 + (m.mes - 1)) > mesAtualNum;
-    const saidasTotal = r.saidasRealizadas + r.saidasPrevistas;
+    const saidasRealizadas = r.despesas + r.investimentos;
+    const saidasTotal = saidasRealizadas + r.saidasPrevistas;
     const saldoDoMes = r.receitas - saidasTotal;
     acumulado += saldoDoMes;
 
@@ -195,7 +198,7 @@ async function carregarFluxo() {
       menorSaldoMes = mesLabel(m.ano, m.mes);
     }
 
-    return { label: mesLabel(m.ano, m.mes), futuro, receitas: r.receitas, saidasRealizadas: r.saidasRealizadas, saidasPrevistas: r.saidasPrevistas, saldoDoMes, acumulado };
+    return { label: mesLabel(m.ano, m.mes), futuro, receitas: r.receitas, despesas: r.despesas, investimentos: r.investimentos, saidasRealizadas, saidasPrevistas: r.saidasPrevistas, saldoDoMes, acumulado };
   });
 
   const saldoAtual = linhas.filter(l => !l.futuro).slice(-1)[0]?.acumulado ?? saldoInicialValor;
@@ -211,7 +214,7 @@ async function carregarFluxo() {
       <td style="text-transform:capitalize">${l.label}</td>
       <td>${l.futuro ? '<span class="badge bg-info">Previsto</span>' : '<span class="badge bg-success">Realizado</span>'}</td>
       <td style="text-align:right">${formatarMoeda(l.receitas)}</td>
-      <td style="text-align:right">${formatarMoeda(l.saidasRealizadas)}</td>
+      <td style="text-align:right;cursor:help" title="Despesas: ${formatarMoeda(l.despesas)}&#10;Investimentos: ${formatarMoeda(l.investimentos)}">${formatarMoeda(l.saidasRealizadas)}</td>
       <td style="text-align:right">${l.saidasPrevistas > 0 ? formatarMoeda(l.saidasPrevistas) : '—'}</td>
       <td style="text-align:right;color:${l.saldoDoMes >= 0 ? 'var(--success)' : 'var(--danger)'}">${formatarMoeda(l.saldoDoMes)}</td>
       <td style="text-align:right;font-weight:500;color:${l.acumulado >= 0 ? 'var(--text)' : 'var(--danger)'}">${formatarMoeda(l.acumulado)}</td>
