@@ -137,7 +137,19 @@ async function carregarBase() {
   }
 
   atualizarOpcoesConta();
+  await definirMesComDados();
   carregarLista();
+}
+
+// Abre sempre no último mês que teve lançamento (da empresa filtrada), não no mês calendário atual
+async function definirMesComDados() {
+  const empresaId = document.getElementById('filtroEmpresa').value;
+  let query = supabaseClient.from('lancamentos').select('data').order('data', { ascending: false }).limit(1);
+  if (empresaId) query = query.eq('empresa_id', Number(empresaId));
+  const { data } = await query;
+  if (data && data.length > 0) {
+    document.getElementById('filtroMes').value = data[0].data.slice(0, 7);
+  }
 }
 
 function atualizarOpcoesConta() {
@@ -208,7 +220,10 @@ async function salvarLancamento() {
 
 document.getElementById('btnSalvar').addEventListener('click', salvarLancamento);
 
-document.getElementById('filtroEmpresa').addEventListener('change', carregarLista);
+document.getElementById('filtroEmpresa').addEventListener('change', async () => {
+  await definirMesComDados();
+  carregarLista();
+});
 document.getElementById('filtroMes').addEventListener('change', carregarLista);
 
 function nomeConta(conta_id) {
