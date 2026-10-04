@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Lima Painel — Guia do Sistema</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="ajuda.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('guia');
+
+const { EMPRESAS_DESC, SIGLAS, CONCEITOS } = window.AGROLIMA_AJUDA;
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const FLUXO = [
+  ['Lançamentos', 'Cada entrada ou saída de dinheiro de uma empresa é uma linha em Lançamentos: empresa, data, tipo, conta do plano de contas, histórico e valor. Todos os totais, o Painel e o Fluxo de Caixa são somas desses lançamentos. Os de 2025 e 2026 foram importados das planilhas FINANCEIRO de cada empresa, linha por linha, com a conta que a planilha já indicava; não é um resultado final por categoria.'],
+  ['Contas a pagar', 'Ao marcar uma conta como paga, o sistema cria sozinho o lançamento de despesa na conta escolhida. Contas fixas (todo mês) são cadastradas uma vez e geradas por mês.'],
+  ['Folha de pagamento', 'Cada funcionário tem salário, acréscimo e adiantamentos pendentes. O botão "Gerar conta a pagar" soma a folha da empresa e cria uma única conta a pagar; ao pagá-la, o lançamento entra sozinho.'],
+  ['Dívidas', 'Cada empréstimo tem a lista de parcelas com vencimento e valor, como no contrato. Marcar uma parcela como paga apenas registra a data de pagamento: não cria lançamento. O dinheiro que saiu para o banco precisa estar também em Lançamentos.'],
+  ['Terras: faturamento por pasto', 'Ao lançar a cobrança do pasto, o sistema cria sozinho a receita "pasto" de Terras em Lançamentos.'],
+  ['Máquinas, Fábrica de Sal, Lima Bank, Fretes', 'Têm controles próprios (horas, produção, empréstimos, viagens) que alimentam seus relatórios, mas não criam lançamentos sozinhos. O que mexe no caixa precisa ser lançado em Lançamentos.'],
+  ['Painel e Fluxo de Caixa', 'O Painel mostra o que venceu ou vence (contas, parcelas, manutenção, partos e vacinas). O Fluxo de Caixa mostra, mês a mês, o realizado (lançamentos) e o previsto (contas a pagar e parcelas ainda não pagas).']
+];
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Guia do Sistema</div>
+      <div class="pagesub">O que cada empresa faz, como os dados entram, siglas e termos</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-help-circle"></i> Explicações na tela</div>
+    <div class="cardb">
+      Com o botão <b>Explicações: ligadas</b> (no alto da tela), passe o mouse sobre um campo, nome de coluna, botão, sigla ou nome de empresa para ver o que ele significa e o que lançar ali.
+      Termos com linha pontilhada têm explicação. Quando a equipe já souber usar, clique no botão para desligar; ele lembra a sua escolha neste navegador.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-building"></i> O que cada empresa faz</div>
+    <div class="cardb" id="blocoEmpresas"></div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-arrows-exchange"></i> Como os dados entram e o que alimenta o quê</div>
+    <div class="cardb" id="blocoFluxo"></div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-book"></i> Termos do dia a dia</div>
+    <div class="cardb" id="blocoConceitos"></div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-letter-case"></i> Siglas</div>
+    <div class="cardb table-wrap">
+      <table><thead><tr><th>Sigla</th><th>Significado</th></tr></thead><tbody id="tbodySiglas"></tbody></table>
+    </div>
+  </div>
+`;
+
+const bloco = (titulo, corpo) => `<div style="padding:10px 0;border-bottom:0.5px solid var(--border)"><b>${esc(titulo)}</b>${corpo}</div>`;
+
+document.getElementById('blocoEmpresas').innerHTML = Object.values(EMPRESAS_DESC).map(d =>
+  bloco(d.nome, `<div style="margin:4px 0 6px">${esc(d.resumo)}</div><ul style="margin:0 0 0 18px;padding:0;color:var(--text-muted);font-size:13px;line-height:1.5">${d.detalhes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`)
+).join('');
+
+document.getElementById('blocoFluxo').innerHTML = FLUXO.map(([t, d]) => bloco(t, `<div style="margin-top:4px;color:var(--text-muted);font-size:13px;line-height:1.5">${esc(d)}</div>`)).join('');
+document.getElementById('blocoConceitos').innerHTML = CONCEITOS.map(([t, d]) => bloco(t, `<div style="margin-top:4px;color:var(--text-muted);font-size:13px;line-height:1.5">${esc(d)}</div>`)).join('');
+document.getElementById('tbodySiglas').innerHTML = Object.entries(SIGLAS).map(([s, d]) => `<tr><td><b>${esc(s)}</b></td><td>${esc(d)}</td></tr>`).join('');
+
+(async () => { await checkAuth(); showUserEmail(); })();
+</script>
+
+</body>
+</html>

@@ -7,6 +7,18 @@
   document.documentElement.setAttribute('data-theme', temaSalvo);
 })();
 
+// ---------- explicações ao passar o mouse (liga/desliga) ----------
+window.explicacoesLigadas = () => { try { return localStorage.getItem('agrolima-explicacoes') !== 'off'; } catch (e) { return true; } };
+if (!window.explicacoesLigadas()) document.documentElement.classList.add('sem-explicacao');
+function alternarExplicacoes() {
+  const ligar = !window.explicacoesLigadas();
+  try { localStorage.setItem('agrolima-explicacoes', ligar ? 'on' : 'off'); } catch (e) {}
+  document.documentElement.classList.toggle('sem-explicacao', !ligar);
+  const b = document.getElementById('explBtn');
+  if (b) b.innerHTML = `<i class="ti ti-help-circle"></i> Explicações: ${ligar ? 'ligadas' : 'desligadas'}`;
+  const tip = document.querySelector('.sig-tip'); if (tip) tip.hidden = true;
+}
+
 // "Administrativo" — comum, misturado entre todas as empresas
 const MENU_ADMINISTRATIVO = [
   { page: 'painel',      label: 'Painel',        icon: 'ti-layout-dashboard' },
@@ -17,6 +29,7 @@ const MENU_ADMINISTRATIVO = [
   { page: 'todasdividas', label: 'Todas Dívidas', icon: 'ti-percentage' },
   { page: 'fluxocaixa',  label: 'Fluxo Consolidado', icon: 'ti-chart-line', href: () => 'fluxocaixa.html' },
   { page: 'calculadora', label: 'Calculadora',   icon: 'ti-calculator' },
+  { page: 'guia',        label: 'Guia do Sistema', icon: 'ti-book' },
 ];
 
 // Itens que aparecem dentro de cada "quadrado" de empresa — cada um sabe montar seu próprio link filtrado.
@@ -124,6 +137,7 @@ function renderTopbarSidebar(activePage) {
       <img src="logo-agrolima.png" alt="Agrolima" class="brand-logo">
       <div class="brand">Agro Lima Painel</div>
       <div class="spacer"></div>
+      <button class="expl-btn" id="explBtn" onclick="alternarExplicacoes()" title="Liga ou desliga as explicações que aparecem ao passar o mouse sobre campos, colunas, botões, siglas e nomes de empresa. Desligue quando a equipe já souber operar."><i class="ti ti-help-circle"></i> Explicações: ${window.explicacoesLigadas() ? 'ligadas' : 'desligadas'}</button>
       <button class="theme-toggle" id="themeToggleBtn" onclick="alternarTema()" title="Alternar tema claro/escuro">
         <i class="ti ${temaAtual === 'light' ? 'ti-moon' : 'ti-sun'}" id="themeToggleIcon"></i>
       </button>
@@ -144,6 +158,12 @@ function renderTopbarSidebar(activePage) {
       <div class="main" id="mainContent"></div>
     </div>
   `);
+
+  if (!window.AGROLIMA_AJUDA) {
+    const s = document.createElement('script');
+    s.src = 'ajuda.js';
+    document.body.appendChild(s);
+  }
 }
 
 function alternarTema() {

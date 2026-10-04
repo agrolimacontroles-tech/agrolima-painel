@@ -302,3 +302,23 @@ tr:hover td { background: var(--bg-hover); }
   .sidebar.collapsed { width: 0; }
   .frow { grid-template-columns: 1fr; }
 }
+
+/* ---------- Explicações ao passar o mouse ---------- */
+.expl-btn {
+  background: transparent; border: 0.5px solid var(--border); color: var(--text-muted);
+  font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  font-family: inherit; display: inline-flex; align-items: center; gap: 5px;
+}
+.expl-btn:hover { background: var(--bg-hover); color: var(--text); }
+.termo { cursor: help; }
+.termo:not(.btn):not(.stbtn):not(.sitem):not(.badge) { text-decoration: underline dotted; text-decoration-color: var(--text-dim); text-underline-offset: 3px; }
+abbr.sig { text-decoration: underline dotted; text-decoration-color: var(--info); text-underline-offset: 3px; cursor: help; }
+.sem-explicacao .termo, .sem-explicacao abbr.sig { text-decoration: none !important; cursor: inherit; }
+.sig-tip {
+  position: fixed; z-index: 200; max-width: 300px; background: #0f2036; color: #e8f0fc;
+  border: 0.5px solid #2a4366; font-size: 12.5px; line-height: 1.45; padding: 9px 12px; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); pointer-events: none; font-weight: 400; text-transform: none; letter-spacing: 0;
+}
+.sig-tip[hidden] { display: none; }
+.sig-tip b { font-weight: 700; margin-right: 4px; color: #8fc1ff; }
+@media (max-width: 700px) { .expl-btn { font-size: 0; gap: 0; } .expl-btn i { font-size: 16px; } }
