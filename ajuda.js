@@ -184,6 +184,9 @@
     'ver parcelas': 'Abre a lista de parcelas desse financiamento, com vencimento, valor e se já foi paga.',
     'encerrar': 'Marca a ocupação como terminada a partir de hoje.',
     'demitir': 'Marca o funcionário como desligado. O histórico fica guardado.',
+    'editar': 'Abre os dados do funcionário no formulário de cima para você alterar nome, cargo, empresa, admissão ou salário.',
+    'salvar alterações': 'Grava as mudanças feitas no cadastro. O histórico (dias, férias, adiantamentos) não é alterado.',
+    'cancelar edição': 'Desiste da alteração e volta o formulário para o modo de novo cadastro.',
     'reativar': 'Traz de volta o funcionário ou item que estava desativado.'
   };
 

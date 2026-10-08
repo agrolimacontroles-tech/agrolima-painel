@@ -92,6 +92,7 @@ document.getElementById('mainContent').innerHTML = `
           <div class="fgroup"><label>Salário</label><input type="number" id="fSalario" step="0.01"></div>
         </div>
         <button class="btn btn-primary" id="btnAddFuncionario"><i class="ti ti-check"></i> Cadastrar</button>
+        <button class="btn btn-secondary" id="btnCancelarEdicaoFuncionario" style="display:none" onclick="limparFormFuncionario()"><i class="ti ti-x"></i> Cancelar edição</button>
         <span id="msgFuncionario" class="msg" style="display:inline-block;margin-left:10px"></span>
       </div>
     </div>
@@ -301,24 +302,54 @@ document.getElementById('btnAddFuncionario').addEventListener('click', async () 
     msg.className = 'msg show error';
     return;
   }
-  const { error } = await supabaseClient.from('funcionarios').insert({
+  const dados = {
     nome,
     cargo: document.getElementById('fCargo').value || null,
     empresa_id: Number(document.getElementById('fEmpresa').value) || null,
     data_admissao,
     salario: parseFloat(document.getElementById('fSalario').value) || null,
-  });
+  };
+  const editando = funcionarioEditandoId !== null;
+  const { error } = editando
+    ? await supabaseClient.from('funcionarios').update(dados).eq('id', funcionarioEditandoId)
+    : await supabaseClient.from('funcionarios').insert(dados);
   if (error) {
     msg.textContent = 'Erro: ' + error.message;
     msg.className = 'msg show error';
     return;
   }
-  msg.textContent = 'Funcionário cadastrado!';
+  msg.textContent = editando ? 'Alterações salvas!' : 'Funcionário cadastrado!';
   msg.className = 'msg show success';
-  ['fNome', 'fCargo', 'fSalario'].forEach(id => document.getElementById(id).value = '');
+  limparFormFuncionario();
   await carregarFuncionarios();
   setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
 });
+
+let funcionarioEditandoId = null;
+
+function limparFormFuncionario() {
+  funcionarioEditandoId = null;
+  ['fNome', 'fCargo', 'fSalario', 'fDataAdmissao'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('btnAddFuncionario').innerHTML = '<i class="ti ti-check"></i> Cadastrar';
+  document.getElementById('btnCancelarEdicaoFuncionario').style.display = 'none';
+  document.querySelector('#abaFuncionarios .cardh').innerHTML = '<i class="ti ti-user-plus"></i> Novo funcionário';
+}
+
+function editarFuncionario(id) {
+  const f = FUNCIONARIOS.find(x => x.id === id);
+  if (!f) return;
+  funcionarioEditandoId = id;
+  document.getElementById('fNome').value = f.nome || '';
+  document.getElementById('fCargo').value = f.cargo || '';
+  document.getElementById('fEmpresa').value = f.empresa_id || '';
+  document.getElementById('fDataAdmissao').value = f.data_admissao || '';
+  document.getElementById('fSalario').value = f.salario ?? '';
+  document.getElementById('btnAddFuncionario').innerHTML = '<i class="ti ti-check"></i> Salvar alterações';
+  document.getElementById('btnCancelarEdicaoFuncionario').style.display = '';
+  document.querySelector('#abaFuncionarios .cardh').innerHTML = '<i class="ti ti-pencil"></i> Editando: ' + f.nome;
+  document.getElementById('fNome').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('fNome').focus();
+}
 
 function badgeStatusFuncionario(status) {
   const map = { ativo: 'bg-success', ferias: 'bg-info', afastado: 'bg-warning', demitido: 'bg-danger' };
@@ -340,6 +371,7 @@ async function carregarFuncionarios() {
         <td>${new Date(f.data_admissao + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
         <td>${badgeStatusFuncionario(f.status)}</td>
         <td style="white-space:nowrap">
+          <button class="btn btn-secondary" style="padding:4px 10px" title="Editar" onclick="editarFuncionario(${f.id})"><i class="ti ti-pencil"></i> Editar</button>
           ${f.status !== 'demitido'
             ? `<button class="btn btn-danger" style="padding:4px 10px" onclick="demitirFuncionario(${f.id})"><i class="ti ti-user-x"></i> Demitir</button>`
             : `<button class="btn btn-success" style="padding:4px 10px" onclick="reativarFuncionario(${f.id})"><i class="ti ti-user-check"></i> Reativar</button>`}
