@@ -1,5 +1,5 @@
 // ============================================================
-// Agro Lima Painel — Sidebar / navegação compartilhada
+// SISBOI — Sidebar / navegação compartilhada
 // ============================================================
 
 (function aplicarTemaSalvo() {
@@ -135,7 +135,7 @@ function renderTopbarSidebar(activePage) {
     <div class="topbar">
       <button class="menubtn" onclick="toggleSidebar()" title="Minimizar/expandir menu"><i class="ti ti-menu-2"></i></button>
       <img src="logo-agrolima.png" alt="Agrolima" class="brand-logo">
-      <div class="brand">Agro Lima Painel</div>
+      <div class="brand">SISBOI</div>
       <div class="spacer"></div>
       <button class="expl-btn" id="explBtn" onclick="alternarExplicacoes()" title="Liga ou desliga as explicações que aparecem ao passar o mouse sobre campos, colunas, botões, siglas e nomes de empresa. Desligue quando a equipe já souber operar."><i class="ti ti-help-circle"></i> Explicações: ${window.explicacoesLigadas() ? 'ligadas' : 'desligadas'}</button>
       <button class="theme-toggle" id="themeToggleBtn" onclick="alternarTema()" title="Alternar tema claro/escuro">

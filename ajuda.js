@@ -1,5 +1,5 @@
 // ============================================================
-// Agro Lima Painel — explicações (ajuda ao passar o mouse)
+// SISBOI — explicações (ajuda ao passar o mouse)
 // Passar o mouse (ou tocar) em campos, colunas, botões, siglas e nomes de empresa mostra o que significam
 // e o que lançar ali. O botão "Explicações" na barra de cima liga/desliga tudo.
 // Para incluir um termo novo: acrescente em TERMOS (texto exato, minúsculo) ou, se o significado muda de
