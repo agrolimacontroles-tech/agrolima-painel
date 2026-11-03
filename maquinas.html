@@ -64,7 +64,7 @@ document.getElementById('mainContent').innerHTML = `
 
   <div id="abaUso">
     <div class="card">
-      <div class="cardh"><i class="ti ti-plus"></i> Novo uso</div>
+      <div class="cardh" id="tituloFormUso"><i class="ti ti-plus"></i> Novo uso</div>
       <div class="cardb">
         <div class="frow cols-3">
           <div class="fgroup">
@@ -102,6 +102,7 @@ document.getElementById('mainContent').innerHTML = `
         </div>
         <div style="margin-top:14px">
           <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar uso</button>
+          <button class="btn btn-secondary" id="btnCancelarEdicaoUso" style="display:none" onclick="cancelarEdicaoUso()"><i class="ti ti-x"></i> Cancelar edição</button>
           <span id="msgSalvar" class="msg" style="display:inline-block;margin-left:10px"></span>
         </div>
       </div>
@@ -265,6 +266,45 @@ function nomeEmpresa(id) { return (EMPRESAS.find(e => e.id === id) || {}).nome |
 function nomeMaquina(id) { return (MAQUINAS.find(m => m.id === id) || {}).nome || '—'; }
 
 // ---------- Uso diário ----------
+let USOS = {};
+let EDITANDO_USO = null;
+
+function limparFormUso() {
+  EDITANDO_USO = null;
+  ['fResponsavel', 'fServico', 'fHorimetroInicial', 'fHorimetroFinal'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fData').value = hojeISO();
+  document.getElementById('fValorHora').value = 120;
+  document.getElementById('tituloFormUso').innerHTML = '<i class="ti ti-plus"></i> Novo uso';
+  document.getElementById('btnSalvar').innerHTML = '<i class="ti ti-check"></i> Salvar uso';
+  document.getElementById('btnCancelarEdicaoUso').style.display = 'none';
+}
+
+function cancelarEdicaoUso() {
+  limparFormUso();
+  const msg = document.getElementById('msgSalvar');
+  msg.textContent = ''; msg.className = 'msg';
+}
+
+function editarUso(id) {
+  const u = USOS[id];
+  if (!u) return;
+  EDITANDO_USO = id;
+  document.getElementById('fMaquina').value = u.maquina_id;
+  document.getElementById('fEmpresa').value = u.empresa_beneficiada_id;
+  document.getElementById('fData').value = u.data;
+  document.getElementById('fResponsavel').value = u.responsavel || '';
+  document.getElementById('fServico').value = u.servico || '';
+  document.getElementById('fHorimetroInicial').value = u.horimetro_inicial;
+  document.getElementById('fHorimetroFinal').value = u.horimetro_final;
+  document.getElementById('fValorHora').value = u.valor_hora || 120;
+  document.getElementById('tituloFormUso').innerHTML = '<i class="ti ti-pencil"></i> Editar uso';
+  document.getElementById('btnSalvar').innerHTML = '<i class="ti ti-check"></i> Salvar alterações';
+  document.getElementById('btnCancelarEdicaoUso').style.display = '';
+  const msg = document.getElementById('msgSalvar');
+  msg.textContent = ''; msg.className = 'msg';
+  document.getElementById('tituloFormUso').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 async function salvarUso() {
   const maquina_id = Number(document.getElementById('fMaquina').value);
   const empresa_beneficiada_id = Number(document.getElementById('fEmpresa').value);
@@ -286,13 +326,17 @@ async function salvarUso() {
 
   const btn = document.getElementById('btnSalvar');
   btn.disabled = true;
-  const { error } = await supabaseClient.from('uso_maquina').insert({
+  const registro = {
     maquina_id, empresa_beneficiada_id, data,
     responsavel: document.getElementById('fResponsavel').value || null,
     servico: document.getElementById('fServico').value || null,
     horimetro_inicial, horimetro_final,
     valor_hora: parseFloat(document.getElementById('fValorHora').value) || 120,
-  });
+  };
+  const editando = EDITANDO_USO !== null;
+  const { error } = editando
+    ? await supabaseClient.from('uso_maquina').update(registro).eq('id', EDITANDO_USO)
+    : await supabaseClient.from('uso_maquina').insert(registro);
   btn.disabled = false;
 
   if (error) {
@@ -301,9 +345,9 @@ async function salvarUso() {
     return;
   }
 
-  msg.textContent = 'Uso salvo!';
+  msg.textContent = editando ? 'Uso atualizado!' : 'Uso salvo!';
   msg.className = 'msg show success';
-  ['fResponsavel', 'fServico', 'fHorimetroInicial', 'fHorimetroFinal'].forEach(id => document.getElementById(id).value = '');
+  limparFormUso();
   carregarUso();
   setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 3000);
 }
@@ -317,6 +361,7 @@ async function carregarUso() {
   const fim = new Date(fimData.getFullYear(), fimData.getMonth() + 1, 0).toISOString().slice(0, 10);
 
   const usos = await buscarPaginado(() => supabaseClient.from('uso_maquina').select('*').gte('data', inicio).lte('data', fim).order('data', { ascending: false }));
+  USOS = Object.fromEntries(usos.map(u => [u.id, u]));
 
   const faturamento = new Map();
   EMPRESAS.forEach(e => faturamento.set(e.id, { nome: e.nome, horas: 0, valor: 0 }));
@@ -342,13 +387,17 @@ async function carregarUso() {
           <td>${u.servico || '—'}</td>
           <td style="text-align:right">${horas.toFixed(1)}</td>
           <td style="text-align:right">${formatarMoeda(horas * Number(u.valor_hora || 120))}</td>
-          <td><button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirUso(${u.id})"><i class="ti ti-trash"></i></button></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-secondary" style="padding:4px 10px" title="Editar" onclick="editarUso(${u.id})"><i class="ti ti-pencil"></i></button>
+            <button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirUso(${u.id})"><i class="ti ti-trash"></i></button>
+          </td>
         </tr>
       `;
     }).join('');
 }
 
 async function excluirUso(id) {
+  if (EDITANDO_USO === id) limparFormUso();
   await supabaseClient.from('uso_maquina').delete().eq('id', id);
   carregarUso();
 }
