@@ -1,5 +1,5 @@
 // ============================================================
-// SISBOI — Configuração do Supabase
+// AGRO LIMA — Configuração do Supabase
 // Inclua este arquivo em todas as páginas, antes dos demais scripts
 // ============================================================
 

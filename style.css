@@ -150,6 +150,22 @@ a { color: var(--accent); text-decoration: none; }
 .sidebar.collapsed .sgroup-children { display: none !important; }
 .sidebar.collapsed .sgroup-children .sitem { padding: 10px 0; }
 
+/* item do menu com setinha que abre sub-itens (ex.: Funcionários > Registro de chuvas) */
+.sitem-split { display: flex; align-items: stretch; }
+.sitem-split .sitem { flex: 1; min-width: 0; }
+.sarrow {
+  border: none; background: transparent; color: var(--text-dim); cursor: pointer;
+  width: 34px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  border-left: 0.5px solid transparent; font-family: inherit;
+}
+.sarrow:hover { background: var(--bg-hover); color: var(--text); }
+.sarrow i { font-size: 15px; transition: transform 0.15s; }
+.sarrow.open i { transform: rotate(90deg); }
+.ssub { display: flex; flex-direction: column; gap: 1px; }
+.ssub .sitem { padding-left: 34px; font-size: 12.5px; }
+.sidebar.collapsed .sarrow { display: none; }
+.sidebar.collapsed .ssub { display: none !important; }
+
 .main { flex: 1; padding: 0.85rem 1.5rem 1.5rem; overflow-x: auto; }
 
 /* ---------- Cabeçalho de página ---------- */

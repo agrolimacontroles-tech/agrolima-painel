@@ -1,5 +1,5 @@
 // ============================================================
-// SISBOI — Sidebar / navegação compartilhada
+// AGRO LIMA — Sidebar / navegação compartilhada
 // ============================================================
 
 (function aplicarTemaSalvo() {
@@ -24,7 +24,9 @@ const MENU_ADMINISTRATIVO = [
   { page: 'painel',      label: 'Painel',        icon: 'ti-layout-dashboard' },
   { page: 'rotina',      label: 'Rotina',        icon: 'ti-checklist' },
   { page: 'lancamentos', label: 'Lançamentos',   icon: 'ti-cash-banknote' },
-  { page: 'funcionarios', label: 'Funcionários', icon: 'ti-users' },
+  { page: 'funcionarios', label: 'Funcionários', icon: 'ti-users', filhos: [
+    { page: 'chuvas', label: 'Registro de chuvas', icon: 'ti-cloud-rain' },
+  ] },
   { page: 'contaspagar', label: 'Contas a pagar', icon: 'ti-file-invoice' },
   { page: 'todasdividas', label: 'Todas Dívidas', icon: 'ti-percentage' },
   { page: 'fluxocaixa',  label: 'Fluxo Consolidado', icon: 'ti-chart-line', href: () => 'fluxocaixa.html' },
@@ -33,7 +35,7 @@ const MENU_ADMINISTRATIVO = [
 ];
 
 // Itens que aparecem dentro de cada "quadrado" de empresa — cada um sabe montar seu próprio link filtrado.
-// Os "cd*" são o sistema real do Top Boi (CurralDigital, https://topboi.vercel.app — domínio/Supabase separados).
+// Os "cd*" são o sistema real do Top Boi (SISBOI, https://topboi.vercel.app — domínio/Supabase separados).
 const ITEM_DEFS_EMPRESA = {
   terras:     { page: 'terras',    label: 'Terras',        icon: 'ti-map-2', href: () => 'terras.html' },
   topvacas:   { page: 'topvacas',  label: 'Top Vacas',     icon: 'ti-tag', href: () => 'topvacas.html' },
@@ -69,11 +71,38 @@ function itemAdministrativoHtml(item, activePage) {
   const href = item.href ? item.href() : `${item.page}.html`;
   const query = href.includes('?') ? href.slice(href.indexOf('?')) : '';
   const ativo = item.page === activePage && location.search === query;
-  return `
+  const botao = `
     <button class="sitem ${ativo ? 'active' : ''}" title="${item.label}" onclick="location.href='${href}'">
       ${iconeHtml(item)}<span>${item.label}</span>
     </button>
   `;
+  if (!item.filhos) return botao;
+
+  // Item com setinha: clicar no nome abre a página; clicar na seta mostra/esconde os itens de dentro.
+  const chave = `agrolima-painel-sub-${item.page}`;
+  const salvo = localStorage.getItem(chave);
+  const filhoAtivo = item.filhos.some(f => f.page === activePage);
+  const aberto = filhoAtivo || (salvo !== null && salvo === '1');
+  const filhosHtml = item.filhos.map(f => `
+    <button class="sitem ${f.page === activePage ? 'active' : ''}" title="${f.label}" onclick="location.href='${f.page}.html'">
+      ${iconeHtml(f)}<span>${f.label}</span>
+    </button>`).join('');
+  return `
+    <div class="sitem-split">
+      ${botao}
+      <button class="sarrow ${aberto ? 'open' : ''}" id="sarrow-${item.page}" title="Mostrar/esconder ${item.label}" aria-label="Mostrar ou esconder itens de ${item.label}" onclick="toggleSubitens('${item.page}')"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    <div class="ssub" id="ssub-${item.page}" style="${aberto ? '' : 'display:none'}">${filhosHtml}</div>
+  `;
+}
+
+function toggleSubitens(page) {
+  const el = document.getElementById(`ssub-${page}`);
+  const seta = document.getElementById(`sarrow-${page}`);
+  const abrindo = el.style.display === 'none';
+  el.style.display = abrindo ? '' : 'none';
+  seta.classList.toggle('open', abrindo);
+  try { localStorage.setItem(`agrolima-painel-sub-${page}`, abrindo ? '1' : '0'); } catch (e) {}
 }
 
 function itemEmpresaHtml(key, empresaId, activePage) {
@@ -135,7 +164,7 @@ function renderTopbarSidebar(activePage) {
     <div class="topbar">
       <button class="menubtn" onclick="toggleSidebar()" title="Minimizar/expandir menu"><i class="ti ti-menu-2"></i></button>
       <img src="logo-agrolima.png" alt="Agrolima" class="brand-logo">
-      <div class="brand">SISBOI</div>
+      <div class="brand">AGRO LIMA</div>
       <div class="spacer"></div>
       <button class="expl-btn" id="explBtn" onclick="alternarExplicacoes()" title="Liga ou desliga as explicações que aparecem ao passar o mouse sobre campos, colunas, botões, siglas e nomes de empresa. Desligue quando a equipe já souber operar."><i class="ti ti-help-circle"></i> Explicações: ${window.explicacoesLigadas() ? 'ligadas' : 'desligadas'}</button>
       <button class="theme-toggle" id="themeToggleBtn" onclick="alternarTema()" title="Alternar tema claro/escuro">

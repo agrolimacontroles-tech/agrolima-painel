@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AGRO LIMA — Registro de chuvas</title>
+<link rel="icon" href="logo-agrolima.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  /* ---- faixa de destaque (total do período) ---- */
+  .chuva-hero {
+    border-radius: 14px; padding: 1.4rem 1.6rem; margin-bottom: 14px; color: #eaf3ff;
+    background: radial-gradient(120% 140% at 0% 0%, #2a6fd0 0%, #1a4a8a 45%, #0d2a52 100%);
+    display: grid; grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.4fr); gap: 1.6rem; align-items: center;
+    position: relative; overflow: hidden; border: 0.5px solid #2a5a9a;
+  }
+  .chuva-hero::after {
+    content: "\ea54"; font-family: "tabler-icons"; position: absolute; right: -14px; top: -34px;
+    font-size: 190px; color: rgba(255,255,255,.07); line-height: 1; pointer-events: none;
+  }
+  .hero-label { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #9cc4f5; }
+  .hero-total { font-size: 46px; font-weight: 600; line-height: 1.05; margin-top: 4px; }
+  .hero-total small { font-size: 18px; font-weight: 400; color: #9cc4f5; margin-left: 6px; }
+  .hero-sub { font-size: 12.5px; color: #9cc4f5; margin-top: 6px; }
+  .hero-faz { display: grid; gap: 9px; position: relative; z-index: 1; }
+  .hf-linha { display: grid; grid-template-columns: 92px 1fr 78px; align-items: center; gap: 10px; font-size: 13px; }
+  .hf-nome { display: flex; align-items: center; gap: 7px; color: #eaf3ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hf-bolinha { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .hf-trilho { height: 9px; border-radius: 6px; background: rgba(255,255,255,.14); overflow: hidden; }
+  .hf-barra { height: 100%; border-radius: 6px; transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .hf-valor { text-align: right; font-variant-numeric: tabular-nums; color: #eaf3ff; font-weight: 500; }
+
+  /* ---- formulário de registro ---- */
+  .reg-grid { display: grid; grid-template-columns: 170px repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; align-items: end; }
+  .mm-wrap { position: relative; }
+  .mm-wrap input { width: 100%; padding-right: 36px; }
+  .mm-wrap span { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--text-dim); pointer-events: none; }
+  .mm-label { display: flex; align-items: center; gap: 6px; }
+  .reg-obs { margin-top: 12px; }
+  .reg-status { font-size: 12px; color: var(--text-dim); min-height: 18px; margin-top: 10px; }
+  .reg-status b { color: var(--warning); font-weight: 500; }
+  .reg-acoes { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+
+  /* ---- gráfico ---- */
+  .graf-wrap { position: relative; height: 340px; }
+  .graf-vazio { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center;
+    color: var(--text-dim); font-size: 13px; pointer-events: none; padding: 0 1rem; }
+  .graf-vazio.on { display: flex; }
+
+  /* ---- tabela mensal com "calor" ---- */
+  .tab-mes td, .tab-mes th { text-align: center; }
+  .tab-mes td:first-child, .tab-mes th:first-child { text-align: left; font-weight: 500; color: var(--text); }
+  .tab-mes .celula { font-variant-numeric: tabular-nums; border-radius: 6px; }
+  .tab-mes .zero { color: var(--text-dim); }
+  .tab-mes tr.total td { border-top: 1px solid var(--border); font-weight: 600; color: var(--text); }
+  .tab-mes td.tot-col { font-weight: 600; color: var(--text); }
+
+  /* ---- dia a dia ---- */
+  .mes-nav { display: flex; align-items: center; gap: 8px; }
+  .mes-nav .rotulo-mes { min-width: 150px; text-align: center; font-size: 14px; font-weight: 500; color: var(--text); }
+  .nav-btn { background: transparent; border: 0.5px solid var(--border); color: var(--text-muted); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: grid; place-items: center; font-size: 16px; }
+  .nav-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .tab-dia th, .tab-dia td { text-align: center; padding: 7px 10px; }
+  .tab-dia td:first-child, .tab-dia th:first-child { text-align: left; }
+  .tab-dia td:nth-child(2), .tab-dia th:nth-child(2) { text-align: left; color: var(--text-dim); }
+  .tab-dia tr.sem-chuva td { color: var(--text-dim); }
+  .tab-dia tr.com-chuva td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .tab-dia tr { cursor: pointer; }
+  .tab-dia tr.fds td:nth-child(2) { color: var(--warning); }
+  .tab-dia tr.hoje td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .tab-dia tr.total td { border-top: 1px solid var(--border); font-weight: 600; color: var(--text); cursor: default; background: transparent; }
+  .pill-mm { display: inline-block; min-width: 54px; padding: 2px 8px; border-radius: 999px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .tab-dia .dica-linha { font-size: 11px; color: var(--text-dim); }
+
+  .periodo-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .periodo-bar select { background: var(--bg-input); color: var(--text); border: 0.5px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 13px; font-family: inherit; }
+  .grupo-btn { display: inline-flex; gap: 4px; }
+
+  @media (max-width: 860px) {
+    .chuva-hero { grid-template-columns: 1fr; }
+    .hero-total { font-size: 38px; }
+    .reg-grid { grid-template-columns: 1fr 1fr; }
+    .graf-wrap { height: 280px; }
+  }
+</style>
+</head>
+<body>
+
+<script src="supabase-config.js"></script>
+<script src="layout.js"></script>
+<script>
+renderTopbarSidebar('chuvas');
+
+document.getElementById('mainContent').innerHTML = `
+  <div class="pagehead">
+    <div>
+      <div class="pagetitle">Registro de chuvas</div>
+      <div class="pagesub">Anote quanto choveu em cada fazenda e acompanhe o total por mês</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <span id="tituloReg"><i class="ti ti-cloud-rain"></i> Registrar chuva</span>
+      <button class="btn btn-secondary" id="btnNovaFazenda" style="padding:5px 11px;font-size:12px"><i class="ti ti-plus"></i> Nova fazenda</button>
+    </div>
+    <div class="cardb">
+      <div class="reg-grid" id="regGrid"></div>
+      <div class="fgroup reg-obs"><label>Observação (opcional)</label><input type="text" id="fObs" placeholder="Ex.: chuva forte à noite, ventania…"></div>
+      <div class="reg-status" id="regStatus"></div>
+      <div class="reg-acoes">
+        <button class="btn btn-primary" id="btnSalvar"><i class="ti ti-check"></i> Salvar chuva</button>
+        <button class="btn btn-secondary" id="btnLimpar" title="Limpa os campos e volta para hoje"><i class="ti ti-eraser"></i> Limpar</button>
+        <span id="msgSalvar" class="msg" style="margin:0"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh periodo-bar">
+      <span><i class="ti ti-chart-bar"></i> Resumo por mês</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="selPeriodo" title="Escolha o ano (jan–dez) ou a safra (ago–jul)"></select>
+        <span class="grupo-btn">
+          <button class="stbtn active" id="modoEmp">Empilhado</button>
+          <button class="stbtn" id="modoLado">Lado a lado</button>
+        </span>
+      </div>
+    </div>
+    <div class="cardb">
+      <div class="chuva-hero" id="hero"></div>
+      <div class="metrics" id="metricas"></div>
+      <div class="graf-wrap"><canvas id="grafico"></canvas><div class="graf-vazio" id="grafVazio"><div><i class="ti ti-cloud-off" style="font-size:30px;display:block;margin-bottom:6px"></i>Nenhuma chuva registrada neste período.</div></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardh"><i class="ti ti-table"></i> Total de chuva por mês <span style="color:var(--text-dim);font-weight:400">(em mm)</span></div>
+    <div class="cardb table-wrap"><table class="tab-mes"><thead id="theadMes"></thead><tbody id="tbodyMes"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <div class="cardh periodo-bar">
+      <span><i class="ti ti-calendar"></i> Dia a dia</span>
+      <div class="mes-nav">
+        <button class="nav-btn" id="mesAnt" title="Mês anterior"><i class="ti ti-chevron-left"></i></button>
+        <div class="rotulo-mes" id="rotuloMes"></div>
+        <button class="nav-btn" id="mesProx" title="Próximo mês"><i class="ti ti-chevron-right"></i></button>
+      </div>
+    </div>
+    <div class="cardb table-wrap">
+      <table class="tab-dia"><thead id="theadDia"></thead><tbody id="tbodyDia"></tbody></table>
+      <div class="dica-linha" style="margin-top:10px">Clique num dia para corrigir ou apagar o registro dele (deixe o campo vazio e salve para apagar).</div>
+    </div>
+  </div>
+`;
+
+// ============================================================
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const MESES_ABREV = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+const DIAS_SEM = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+const CORES_EXTRA = ['#c084fc', '#f472b6', '#22d3ee', '#fb923c', '#a3e635'];
+
+let FAZ = [];                       // fazendas ativas {id, nome, ordem}
+let periodo = null;                 // {tipo:'ano'|'safra', ano}
+let modoGraf = 'empilhado';
+let grafico = null;
+let mesDia = null;                  // {ano, mes} do "Dia a dia"
+let existentesDoDia = {};           // fazenda_id -> registro, do dia que está no formulário
+let resumoAtual = null;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = v => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+const pad = n => String(n).padStart(2, '0');
+const iso = (a, m, d) => `${a}-${pad(m + 1)}-${pad(d)}`;
+const hojeISO = () => { const h = new Date(); return iso(h.getFullYear(), h.getMonth(), h.getDate()); };
+const dataBR = s => new Date(s + 'T00:00:00').toLocaleDateString('pt-BR');
+
+function corFaz(i) {
+  const css = getComputedStyle(document.documentElement);
+  const base = ['--accent', '--success', '--warning'].map(v => css.getPropertyValue(v).trim());
+  return base.concat(CORES_EXTRA)[i % (base.length + CORES_EXTRA.length)];
+}
+// cores vivas e iguais nos dois temas para a faixa azul de destaque
+function corFazFaixa(i) { return ['#6db3ff', '#4dd4a0', '#f0b840'].concat(CORES_EXTRA)[i % (3 + CORES_EXTRA.length)]; }
+
+// ---------- fazendas ----------
+async function carregarFazendas() {
+  const { data, error } = await supabaseClient.from('chuva_fazendas').select('id, nome, ordem').eq('ativa', true).order('ordem').order('id');
+  if (error) { mostrarMsg('Erro ao carregar as fazendas: ' + error.message, true); return; }
+  FAZ = data || [];
+  desenharCamposFormulario();
+}
+
+function desenharCamposFormulario() {
+  const dataAtual = document.getElementById('fData') ? document.getElementById('fData').value : hojeISO();
+  const valores = {};
+  FAZ.forEach(f => { const el = document.getElementById('mm-' + f.id); if (el) valores[f.id] = el.value; });
+  document.getElementById('regGrid').innerHTML = `
+    <div class="fgroup"><label>Data</label><input type="date" id="fData" max="${hojeISO()}" value="${dataAtual || hojeISO()}"></div>
+    ${FAZ.map((f, i) => `
+      <div class="fgroup"><label class="mm-label"><span class="hf-bolinha" style="background:${corFaz(i)}"></span>${esc(f.nome)}</label>
+        <div class="mm-wrap"><input type="number" inputmode="decimal" min="0" step="0.1" id="mm-${f.id}" placeholder="0" value="${esc(valores[f.id] || '')}"><span>mm</span></div></div>`).join('')}
+  `;
+  document.getElementById('fData').addEventListener('change', () => carregarDia(document.getElementById('fData').value));
+  document.querySelectorAll('#regGrid input[type=number]').forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') salvar(); }));
+}
+
+async function novaFazenda() {
+  const nome = (prompt('Nome da nova fazenda (como aparecerá nas tabelas):') || '').trim();
+  if (!nome) return;
+  const ordem = FAZ.reduce((m, f) => Math.max(m, f.ordem), 0) + 1;
+  const { error } = await supabaseClient.from('chuva_fazendas').insert({ nome, ordem });
+  if (error) { mostrarMsg(error.code === '23505' ? 'Já existe uma fazenda com esse nome.' : 'Erro: ' + error.message, true); return; }
+  await carregarFazendas();
+  await atualizarTudo();
+  mostrarMsg('Fazenda "' + nome + '" adicionada.');
+}
+
+// ---------- mensagens ----------
+let msgTimer = null;
+function mostrarMsg(texto, erro) {
+  const m = document.getElementById('msgSalvar');
+  m.textContent = texto;
+  m.className = 'msg show ' + (erro ? 'error' : 'success');
+  clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => { m.textContent = ''; m.className = 'msg'; }, erro ? 6000 : 3500);
+}
+
+// ---------- registrar ----------
+async function carregarDia(data) {
+  existentesDoDia = {};
+  const status = document.getElementById('regStatus');
+  FAZ.forEach(f => { const el = document.getElementById('mm-' + f.id); if (el) el.value = ''; });
+  document.getElementById('fObs').value = '';
+  if (!data) { status.textContent = ''; return; }
+  const { data: regs, error } = await supabaseClient.from('chuvas').select('id, fazenda_id, mm, observacao').eq('data', data);
+  if (error) { status.textContent = 'Erro ao buscar o dia: ' + error.message; return; }
+  (regs || []).forEach(r => {
+    existentesDoDia[r.fazenda_id] = r;
+    const el = document.getElementById('mm-' + r.fazenda_id);
+    if (el) el.value = r.mm;
+    if (r.observacao && !document.getElementById('fObs').value) document.getElementById('fObs').value = r.observacao;
+  });
+  const n = (regs || []).length;
+  status.innerHTML = n ? `<b>Já há ${n === 1 ? '1 registro' : n + ' registros'} em ${dataBR(data)}.</b> Mexa nos valores e salve para corrigir.` : `Sem registro em ${dataBR(data)}. Preencha só as fazendas onde choveu.`;
+}
+
+async function salvar() {
+  const data = document.getElementById('fData').value;
+  if (!data) { mostrarMsg('Escolha a data.', true); return; }
+  if (data > hojeISO()) { mostrarMsg('A data não pode ser no futuro.', true); return; }
+  const obs = document.getElementById('fObs').value.trim() || null;
+
+  const gravar = [], apagar = [];
+  for (const f of FAZ) {
+    const bruto = document.getElementById('mm-' + f.id).value.trim().replace(',', '.');
+    const v = bruto === '' ? 0 : parseFloat(bruto);
+    if (isNaN(v) || v < 0) { mostrarMsg('Valor inválido em ' + f.nome + '.', true); return; }
+    if (v > 0) gravar.push({ fazenda_id: f.id, data, mm: Math.round(v * 10) / 10, observacao: obs });
+    else if (existentesDoDia[f.id]) apagar.push(existentesDoDia[f.id].id);
+  }
+  if (!gravar.length && !apagar.length) { mostrarMsg('Informe os milímetros de pelo menos uma fazenda.', true); return; }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  try {
+    if (gravar.length) {
+      const { error } = await supabaseClient.from('chuvas').upsert(gravar, { onConflict: 'fazenda_id,data' });
+      if (error) throw error;
+    }
+    if (apagar.length) {
+      const { error } = await supabaseClient.from('chuvas').delete().in('id', apagar);
+      if (error) throw error;
+    }
+    mostrarMsg(gravar.length ? 'Chuva registrada!' : 'Registro apagado.');
+    await carregarDia(data);
+    await atualizarTudo();
+  } catch (e) {
+    mostrarMsg('Não foi possível salvar: ' + (e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function limpar() {
+  document.getElementById('fData').value = hojeISO();
+  carregarDia(hojeISO());
+}
+
+// ---------- períodos ----------
+function mesesDoPeriodo(p) {
+  const out = [];
+  if (p.tipo === 'ano') for (let m = 0; m < 12; m++) out.push({ ano: p.ano, mes: m });
+  else for (let k = 0; k < 12; k++) { const m = (7 + k) % 12; out.push({ ano: p.ano + (7 + k >= 12 ? 1 : 0), mes: m }); }
+  return out;
+}
+function intervalo(p) {
+  const ms = mesesDoPeriodo(p);
+  const a = ms[0], z = ms[11];
+  const fimAno = z.mes === 11 ? z.ano + 1 : z.ano, fimMes = (z.mes + 1) % 12;
+  return { inicio: iso(a.ano, a.mes, 1), fimExcl: iso(fimAno, fimMes, 1), meses: ms };
+}
+function rotuloPeriodo(p) { return p.tipo === 'ano' ? `Ano ${p.ano}` : `Safra ${p.ano}/${String(p.ano + 1).slice(2)} (ago a jul)`; }
+
+async function montarSeletorPeriodo() {
+  const { data } = await supabaseClient.from('chuvas').select('data').order('data').limit(1);
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const prim = data && data[0] ? data[0].data : null;
+  const primeiro = prim ? Number(prim.slice(0, 4)) : anoAtual;
+  const primeiraSafra = prim ? (Number(prim.slice(5, 7)) >= 8 ? primeiro : primeiro - 1) : anoAtual;
+  const anos = []; for (let a = anoAtual; a >= Math.min(primeiro, anoAtual); a--) anos.push(a);
+  const safraAtual = hoje.getMonth() >= 7 ? anoAtual : anoAtual - 1;
+  const safras = []; for (let a = safraAtual; a >= Math.min(primeiraSafra, safraAtual); a--) safras.push(a);
+  const sel = document.getElementById('selPeriodo');
+  sel.innerHTML = `
+    <optgroup label="Ano (jan a dez)">${anos.map(a => `<option value="ano:${a}">Ano ${a}</option>`).join('')}</optgroup>
+    <optgroup label="Safra (ago a jul)">${safras.map(a => `<option value="safra:${a}">Safra ${a}/${String(a + 1).slice(2)}</option>`).join('')}</optgroup>`;
+  sel.value = `ano:${anoAtual}`;
+  periodo = { tipo: 'ano', ano: anoAtual };
+  sel.addEventListener('change', () => { const [t, a] = sel.value.split(':'); periodo = { tipo: t, ano: Number(a) }; carregarResumo(); });
+}
+
+// ---------- resumo (faixa, métricas, gráfico, tabela) ----------
+async function carregarResumo() {
+  const { inicio, fimExcl, meses } = intervalo(periodo);
+  let regs;
+  try {
+    regs = await buscarPaginado(() => supabaseClient.from('chuvas').select('id, fazenda_id, data, mm').gte('data', inicio).lt('data', fimExcl).order('data').order('id'));
+  } catch (e) { mostrarMsg('Erro ao carregar o resumo: ' + e.message, true); return; }
+
+  const porMes = meses.map(() => ({}));          // [idxMes][fazId] = mm
+  const totalFaz = {}; const diasComChuva = new Set(); let maior = null;
+  const idxDoMes = new Map(meses.map((m, i) => [`${m.ano}-${m.mes}`, i]));
+  regs.forEach(r => {
+    const [a, m] = r.data.split('-').map(Number);
+    const i = idxDoMes.get(`${a}-${m - 1}`);
+    if (i === undefined) return;
+    const mm = Number(r.mm);
+    porMes[i][r.fazenda_id] = (porMes[i][r.fazenda_id] || 0) + mm;
+    totalFaz[r.fazenda_id] = (totalFaz[r.fazenda_id] || 0) + mm;
+    diasComChuva.add(r.data);
+    if (!maior || mm > maior.mm) maior = { mm, fazenda_id: r.fazenda_id, data: r.data };
+  });
+  const totalMes = porMes.map(o => Object.values(o).reduce((s, v) => s + v, 0));
+  const totalGeral = totalMes.reduce((s, v) => s + v, 0);
+  resumoAtual = { meses, porMes, totalMes, totalFaz, totalGeral, diasComChuva: diasComChuva.size, maior, vazio: regs.length === 0 };
+
+  desenharHero(); desenharMetricas(); desenharGrafico(); desenharTabelaMes();
+}
+
+function nomeFaz(id) { return (FAZ.find(f => f.id === id) || {}).nome || '—'; }
+
+function desenharHero() {
+  const r = resumoAtual;
+  const maxFaz = Math.max(1, ...FAZ.map(f => r.totalFaz[f.id] || 0));
+  document.getElementById('hero').innerHTML = `
+    <div>
+      <div class="hero-label">Chuva no período</div>
+      <div class="hero-total">${fmt(r.totalGeral)}<small>mm</small></div>
+      <div class="hero-sub">${esc(rotuloPeriodo(periodo))} · soma de todas as fazendas</div>
+    </div>
+    <div class="hero-faz">
+      ${FAZ.map((f, i) => {
+        const v = r.totalFaz[f.id] || 0;
+        return `<div class="hf-linha"><div class="hf-nome" title="${esc(f.nome)}"><span class="hf-bolinha" style="background:${corFazFaixa(i)}"></span>${esc(f.nome)}</div>
+          <div class="hf-trilho"><div class="hf-barra" style="width:${(v / maxFaz) * 100}%;background:${corFazFaixa(i)}"></div></div>
+          <div class="hf-valor">${fmt(v)} mm</div></div>`;
+      }).join('')}
+    </div>`;
+}
+
+function desenharMetricas() {
+  const r = resumoAtual;
+  let melhorMes = -1, melhorVal = 0;
+  r.totalMes.forEach((v, i) => { if (v > melhorVal) { melhorVal = v; melhorMes = i; } });
+  const mesTxt = melhorMes >= 0 ? `${MESES[r.meses[melhorMes].mes]} · ${fmt(melhorVal)} mm` : '—';
+  const mediaMes = r.totalMes.filter(v => v > 0).length ? r.totalGeral / r.totalMes.filter(v => v > 0).length : 0;
+  const maiorTxt = r.maior ? `${fmt(r.maior.mm)} mm` : '—';
+  const maiorSub = r.maior ? `${esc(nomeFaz(r.maior.fazenda_id))} · ${dataBR(r.maior.data)}` : '';
+  document.getElementById('metricas').innerHTML = `
+    <div class="metric"><div class="micon" style="background:var(--info-bg);color:var(--info)"><i class="ti ti-droplet"></i></div><div><div class="mlabel">Dias com chuva</div><div class="mval">${r.diasComChuva}</div></div></div>
+    <div class="metric"><div class="micon" style="background:var(--success-bg);color:var(--success)"><i class="ti ti-calendar-stats"></i></div><div><div class="mlabel">Mês mais chuvoso</div><div class="mval" style="font-size:15px">${mesTxt}</div></div></div>
+    <div class="metric"><div class="micon" style="background:var(--warning-bg);color:var(--warning)"><i class="ti ti-cloud-storm"></i></div><div><div class="mlabel">Maior chuva num dia</div><div class="mval" style="font-size:16px">${maiorTxt}</div><div style="font-size:11px;color:var(--text-dim)">${maiorSub}</div></div></div>
+    <div class="metric"><div class="micon" style="background:var(--info-bg);color:var(--info)"><i class="ti ti-chart-arrows-vertical"></i></div><div><div class="mlabel">Média dos meses com chuva</div><div class="mval">${fmt(mediaMes)} <span style="font-size:12px;color:var(--text-dim)">mm</span></div></div></div>`;
+}
+
+const pluginTotal = {
+  id: 'totalNoTopo',
+  afterDatasetsDraw(chart) {
+    if (modoGraf !== 'empilhado') return;
+    const { ctx, data, scales } = chart;
+    const css = getComputedStyle(document.documentElement);
+    ctx.save();
+    ctx.font = '600 11px -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = css.getPropertyValue('--text').trim();
+    ctx.textAlign = 'center';
+    data.labels.forEach((_, i) => {
+      const total = data.datasets.reduce((s, d, di) => s + (chart.isDatasetVisible(di) ? (d.data[i] || 0) : 0), 0);
+      if (!total) return;
+      const meta = chart.getDatasetMeta(0).data[i];
+      ctx.fillText(fmt(total), meta.x, scales.y.getPixelForValue(total) - 6);
+    });
+    ctx.restore();
+  }
+};
+
+function desenharGrafico() {
+  const r = resumoAtual;
+  const css = getComputedStyle(document.documentElement);
+  const cMuted = css.getPropertyValue('--text-muted').trim(), cGrid = css.getPropertyValue('--divider').trim(), cText = css.getPropertyValue('--text').trim();
+  const stacked = modoGraf === 'empilhado';
+  document.getElementById('grafVazio').classList.toggle('on', r.vazio);
+  if (grafico) grafico.destroy();
+  grafico = new Chart(document.getElementById('grafico'), {
+    type: 'bar',
+    plugins: [pluginTotal],
+    data: {
+      labels: r.meses.map(m => MESES_ABREV[m.mes] + (periodo.tipo === 'safra' && (m.mes === 0 || (m.mes === 7)) ? ' ' + String(m.ano).slice(2) : '')),
+      datasets: FAZ.map((f, i) => ({
+        label: f.nome,
+        data: r.porMes.map(o => Math.round((o[f.id] || 0) * 10) / 10),
+        backgroundColor: corFaz(i),
+        borderRadius: stacked ? 4 : 6,
+        borderSkipped: false,
+        maxBarThickness: stacked ? 46 : 26,
+      })),
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: stacked ? 18 : 6 } },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { stacked, grid: { display: false }, ticks: { color: cMuted, font: { size: 12 } } },
+        y: { stacked, beginAtZero: true, grace: stacked ? '8%' : 0, grid: { color: cGrid }, border: { display: false },
+             ticks: { color: cMuted, callback: v => fmt(v) }, title: { display: true, text: 'milímetros (mm)', color: cMuted, font: { size: 11 } } },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: cText, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16 } },
+        tooltip: {
+          callbacks: {
+            label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)} mm`,
+            footer: items => { const t = items.reduce((s, c) => s + c.parsed.y, 0); return items.length > 1 ? `Total: ${fmt(t)} mm` : ''; },
+          },
+        },
+      },
+    },
+  });
+}
+
+function desenharTabelaMes() {
+  const r = resumoAtual;
+  const css = getComputedStyle(document.documentElement);
+  const acc = css.getPropertyValue('--accent').trim();
+  const maxCel = Math.max(1, ...r.porMes.flatMap(o => FAZ.map(f => o[f.id] || 0)));
+  const maxTot = Math.max(1, ...r.totalMes);
+  document.getElementById('theadMes').innerHTML = `<tr><th>Mês</th>${FAZ.map(f => `<th>${esc(f.nome)}</th>`).join('')}<th>Total geral</th></tr>`;
+  const celula = (v, max) => v > 0
+    ? `<span class="celula" style="display:inline-block;min-width:62px;padding:3px 8px;background:color-mix(in srgb, ${acc} ${Math.round(8 + (v / max) * 42)}%, transparent)">${fmt(v)}</span>`
+    : `<span class="zero">–</span>`;
+  document.getElementById('tbodyMes').innerHTML = r.meses.map((m, i) => `
+    <tr><td>${MESES[m.mes]}${(periodo.tipo === 'safra' && (m.mes === 0 || m.mes === 7)) || m.ano !== periodo.ano ? ` <span style="color:var(--text-dim);font-weight:400">${m.ano}</span>` : ''}</td>
+      ${FAZ.map(f => `<td>${celula(r.porMes[i][f.id] || 0, maxCel)}</td>`).join('')}
+      <td class="tot-col">${celula(r.totalMes[i], maxTot)}</td></tr>`).join('') + `
+    <tr class="total"><td>Total do período</td>${FAZ.map(f => `<td>${fmt(r.totalFaz[f.id] || 0)}</td>`).join('')}<td>${fmt(r.totalGeral)}</td></tr>`;
+}
+
+// ---------- dia a dia ----------
+async function carregarDiaADia() {
+  const { ano, mes } = mesDia;
+  document.getElementById('rotuloMes').textContent = `${MESES[mes]} de ${ano}`;
+  const proxAno = mes === 11 ? ano + 1 : ano, proxMes = (mes + 1) % 12;
+  let regs;
+  try {
+    regs = await buscarPaginado(() => supabaseClient.from('chuvas').select('id, fazenda_id, data, mm').gte('data', iso(ano, mes, 1)).lt('data', iso(proxAno, proxMes, 1)).order('data').order('id'));
+  } catch (e) { mostrarMsg('Erro ao carregar o mês: ' + e.message, true); return; }
+  const porDia = {};
+  regs.forEach(r => { const d = Number(r.data.slice(8, 10)); (porDia[d] = porDia[d] || {})[r.fazenda_id] = Number(r.mm); });
+
+  document.getElementById('theadDia').innerHTML = `<tr><th>Data</th><th>Dia</th>${FAZ.map(f => `<th>${esc(f.nome)}</th>`).join('')}<th>Total</th></tr>`;
+  const totais = {}; let totalMesGeral = 0;
+  const ultimo = new Date(ano, mes + 1, 0).getDate();
+  const hoje = hojeISO();
+  let linhas = '';
+  for (let d = 1; d <= ultimo; d++) {
+    const dataISO = iso(ano, mes, d);
+    const sem = new Date(ano, mes, d).getDay();
+    const vals = porDia[d] || {};
+    const totalDia = Object.values(vals).reduce((s, v) => s + v, 0);
+    totalMesGeral += totalDia;
+    FAZ.forEach(f => { totais[f.id] = (totais[f.id] || 0) + (vals[f.id] || 0); });
+    const futuro = dataISO > hoje;
+    linhas += `<tr class="${totalDia ? 'com-chuva' : 'sem-chuva'} ${sem === 0 || sem === 6 ? 'fds' : ''} ${dataISO === hoje ? 'hoje' : ''}" ${futuro ? 'style="cursor:default;opacity:.45"' : `data-dia="${dataISO}"`}>
+      <td>${pad(d)}/${pad(mes + 1)}/${ano}</td><td>${DIAS_SEM[sem]}</td>
+      ${FAZ.map((f, i) => vals[f.id] ? `<td><span class="pill-mm" style="background:color-mix(in srgb, ${corFaz(i)} 22%, transparent);color:var(--text)">${fmt(vals[f.id])} mm</span></td>` : `<td>·</td>`).join('')}
+      <td>${totalDia ? `<b style="color:var(--text)">${fmt(totalDia)} mm</b>` : '·'}</td></tr>`;
+  }
+  linhas += `<tr class="total"><td colspan="2">Total do mês</td>${FAZ.map(f => `<td>${fmt(totais[f.id] || 0)} mm</td>`).join('')}<td>${fmt(totalMesGeral)} mm</td></tr>`;
+  document.getElementById('tbodyDia').innerHTML = linhas;
+  document.querySelectorAll('#tbodyDia tr[data-dia]').forEach(tr => tr.addEventListener('click', () => {
+    document.getElementById('fData').value = tr.dataset.dia;
+    carregarDia(tr.dataset.dia);
+    document.getElementById('tituloReg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const primeiro = document.querySelector('#regGrid input[type=number]'); if (primeiro) setTimeout(() => primeiro.focus(), 350);
+  }));
+}
+
+async function atualizarTudo() { await Promise.all([carregarResumo(), carregarDiaADia()]); }
+
+// ---------- eventos ----------
+document.getElementById('btnSalvar').addEventListener('click', salvar);
+document.getElementById('btnLimpar').addEventListener('click', limpar);
+document.getElementById('btnNovaFazenda').addEventListener('click', novaFazenda);
+document.getElementById('modoEmp').addEventListener('click', () => { modoGraf = 'empilhado'; document.getElementById('modoEmp').classList.add('active'); document.getElementById('modoLado').classList.remove('active'); if (resumoAtual) desenharGrafico(); });
+document.getElementById('modoLado').addEventListener('click', () => { modoGraf = 'lado'; document.getElementById('modoLado').classList.add('active'); document.getElementById('modoEmp').classList.remove('active'); if (resumoAtual) desenharGrafico(); });
+document.getElementById('mesAnt').addEventListener('click', () => { mesDia = mesDia.mes === 0 ? { ano: mesDia.ano - 1, mes: 11 } : { ano: mesDia.ano, mes: mesDia.mes - 1 }; carregarDiaADia(); });
+document.getElementById('mesProx').addEventListener('click', () => { mesDia = mesDia.mes === 11 ? { ano: mesDia.ano + 1, mes: 0 } : { ano: mesDia.ano, mes: mesDia.mes + 1 }; carregarDiaADia(); });
+// redesenha o gráfico/tabelas ao trocar o tema claro/escuro
+new MutationObserver(() => { if (resumoAtual) { desenharHero(); desenharGrafico(); desenharTabelaMes(); desenharCamposFormulario(); carregarDiaADia(); } })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+async function iniciar() {
+  await checkAuth();
+  showUserEmail();
+  const h = new Date();
+  mesDia = { ano: h.getFullYear(), mes: h.getMonth() };
+  await carregarFazendas();
+  await montarSeletorPeriodo();
+  await carregarDia(hojeISO());
+  await atualizarTudo();
+}
+iniciar();
+</script>
+
+</body>
+</html>

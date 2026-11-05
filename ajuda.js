@@ -1,5 +1,5 @@
 // ============================================================
-// SISBOI — explicações (ajuda ao passar o mouse)
+// AGRO LIMA — explicações (ajuda ao passar o mouse)
 // Passar o mouse (ou tocar) em campos, colunas, botões, siglas e nomes de empresa mostra o que significam
 // e o que lançar ali. O botão "Explicações" na barra de cima liga/desliga tudo.
 // Para incluir um termo novo: acrescente em TERMOS (texto exato, minúsculo) ou, se o significado muda de
@@ -27,7 +27,7 @@
       detalhes: [
         'Receitas: venda de garrotes e de bois. Investimentos: compra de bezerros, garrotes e bois, frete e comissão do gado.',
         'Despesas típicas: pasto (aluguel pago a Terras), vaqueiro, sal, medicamentos e vacinas, combustível, manutenção, tropa.',
-        'Tem sistema próprio de controle do rebanho, o CurralDigital (abre em outro site, pelo menu Top Boi > Painel).',
+        'Tem sistema próprio de controle do rebanho, o SISBOI (abre em outro site, pelo menu Top Boi > Painel).',
         'Maior parte das dívidas bancárias do grupo (BB), incluindo a cédula que juntou 5 financiamentos em 2025.'
       ]
     },
@@ -701,7 +701,7 @@
 
   // ---------- menu das empresas (itens dentro de cada quadrado) ----------
   const MENU_EMPRESA = {
-    'painel': 'Abre o CurralDigital, sistema próprio do Top Boi (rebanho, compras, vendas), em uma nova aba.',
+    'painel': 'Abre o SISBOI, sistema próprio do Top Boi (rebanho, compras, vendas), em uma nova aba.',
     'fluxo de caixa': 'Entradas e saídas mês a mês só desta empresa.',
     'dívidas': 'Financiamentos e parcelas só desta empresa.',
     'estoque': 'Estoque de vacinas e produtos veterinários desta empresa (na Fábrica de Sal, o estoque de insumos).',
