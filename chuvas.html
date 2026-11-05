@@ -17,10 +17,6 @@
     display: grid; grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.4fr); gap: 1.6rem; align-items: center;
     position: relative; overflow: hidden; border: 0.5px solid #2a5a9a;
   }
-  .chuva-hero::after {
-    content: "\ea54"; font-family: "tabler-icons"; position: absolute; right: -14px; top: -34px;
-    font-size: 190px; color: rgba(255,255,255,.07); line-height: 1; pointer-events: none;
-  }
   .hero-label { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #9cc4f5; }
   .hero-total { font-size: 46px; font-weight: 600; line-height: 1.05; margin-top: 4px; }
   .hero-total small { font-size: 18px; font-weight: 400; color: #9cc4f5; margin-left: 6px; }
@@ -121,12 +117,13 @@ document.getElementById('mainContent').innerHTML = `
 
   <div class="card">
     <div class="cardh periodo-bar">
-      <span><i class="ti ti-chart-bar"></i> Resumo por mês</span>
+      <span id="tituloResumo"><i class="ti ti-chart-bar"></i> Resumo por mês</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <select id="selPeriodo" title="Escolha o ano (jan–dez) ou a safra (ago–jul)"></select>
+        <select id="selMes" title="Veja um mês só ou todos os meses do período"></select>
         <span class="grupo-btn">
-          <button class="stbtn active" id="modoEmp">Empilhado</button>
-          <button class="stbtn" id="modoLado">Lado a lado</button>
+          <button class="stbtn" id="modoEmp">Empilhado</button>
+          <button class="stbtn active" id="modoLado">Lado a lado</button>
         </span>
       </div>
     </div>
@@ -166,7 +163,7 @@ const CORES_EXTRA = ['#c084fc', '#f472b6', '#22d3ee', '#fb923c', '#a3e635'];
 
 let FAZ = [];                       // fazendas ativas {id, nome, ordem}
 let periodo = null;                 // {tipo:'ano'|'safra', ano}
-let modoGraf = 'empilhado';
+let modoGraf = 'lado';
 let grafico = null;
 let mesDia = null;                  // {ano, mes} do "Dia a dia"
 let existentesDoDia = {};           // fazenda_id -> registro, do dia que está no formulário
@@ -322,34 +319,70 @@ async function montarSeletorPeriodo() {
     <optgroup label="Safra (ago a jul)">${safras.map(a => `<option value="safra:${a}">Safra ${a}/${String(a + 1).slice(2)}</option>`).join('')}</optgroup>`;
   sel.value = `ano:${anoAtual}`;
   periodo = { tipo: 'ano', ano: anoAtual };
-  sel.addEventListener('change', () => { const [t, a] = sel.value.split(':'); periodo = { tipo: t, ano: Number(a) }; carregarResumo(); });
+  sel.addEventListener('change', () => { const [t, a] = sel.value.split(':'); periodo = { tipo: t, ano: Number(a) }; mesSel = null; montarSeletorMes(); carregarResumo(); });
 }
 
 // ---------- resumo (faixa, métricas, gráfico, tabela) ----------
-async function carregarResumo() {
-  const { inicio, fimExcl, meses } = intervalo(periodo);
-  let regs;
-  try {
-    regs = await buscarPaginado(() => supabaseClient.from('chuvas').select('id, fazenda_id, data, mm').gte('data', inicio).lt('data', fimExcl).order('data').order('id'));
-  } catch (e) { mostrarMsg('Erro ao carregar o resumo: ' + e.message, true); return; }
+let regsPeriodo = [];
+let mesSel = null;      // null = todos os meses do período; número = índice (0..11) do mês dentro do período
 
-  const porMes = meses.map(() => ({}));          // [idxMes][fazId] = mm
-  const totalFaz = {}; const diasComChuva = new Set(); let maior = null;
+function montarSeletorMes() {
+  const { meses } = intervalo(periodo);
+  const sel = document.getElementById('selMes');
+  sel.innerHTML = `<option value="">Todos os meses</option>` + meses.map((m, i) => `<option value="${i}">${MESES[m.mes]} ${m.ano}</option>`).join('');
+  sel.value = mesSel === null ? '' : String(mesSel);
+}
+
+async function carregarResumo() {
+  const { inicio, fimExcl } = intervalo(periodo);
+  try {
+    regsPeriodo = await buscarPaginado(() => supabaseClient.from('chuvas').select('id, fazenda_id, data, mm').gte('data', inicio).lt('data', fimExcl).order('data').order('id'));
+  } catch (e) { mostrarMsg('Erro ao carregar o resumo: ' + e.message, true); return; }
+  recalcular();
+}
+
+// monta os números a partir dos registros já carregados (trocar o mês não busca de novo)
+function recalcular() {
+  const { meses } = intervalo(periodo);
   const idxDoMes = new Map(meses.map((m, i) => [`${m.ano}-${m.mes}`, i]));
-  regs.forEach(r => {
+  const porMes = meses.map(() => ({}));            // [idxMes][fazId] = mm
+  const regsNoPeriodo = [];
+  regsPeriodo.forEach(r => {
     const [a, m] = r.data.split('-').map(Number);
     const i = idxDoMes.get(`${a}-${m - 1}`);
     if (i === undefined) return;
-    const mm = Number(r.mm);
-    porMes[i][r.fazenda_id] = (porMes[i][r.fazenda_id] || 0) + mm;
-    totalFaz[r.fazenda_id] = (totalFaz[r.fazenda_id] || 0) + mm;
-    diasComChuva.add(r.data);
-    if (!maior || mm > maior.mm) maior = { mm, fazenda_id: r.fazenda_id, data: r.data };
+    porMes[i][r.fazenda_id] = (porMes[i][r.fazenda_id] || 0) + Number(r.mm);
+    regsNoPeriodo.push({ ...r, i, mm: Number(r.mm) });
   });
   const totalMes = porMes.map(o => Object.values(o).reduce((s, v) => s + v, 0));
-  const totalGeral = totalMes.reduce((s, v) => s + v, 0);
-  resumoAtual = { meses, porMes, totalMes, totalFaz, totalGeral, diasComChuva: diasComChuva.size, maior, vazio: regs.length === 0 };
 
+  // escopo = só o mês escolhido, ou todos os meses
+  const escopoRegs = mesSel === null ? regsNoPeriodo : regsNoPeriodo.filter(r => r.i === mesSel);
+  const totalFaz = {}, dias = new Set(); let maior = null;
+  const somaDia = {};
+  escopoRegs.forEach(r => {
+    totalFaz[r.fazenda_id] = (totalFaz[r.fazenda_id] || 0) + r.mm;
+    dias.add(r.data);
+    somaDia[r.data] = (somaDia[r.data] || 0) + r.mm;
+    if (!maior || r.mm > maior.mm) maior = { mm: r.mm, fazenda_id: r.fazenda_id, data: r.data };
+  });
+  const totalGeral = Object.values(totalFaz).reduce((s, v) => s + v, 0);
+  let diaTop = null;
+  Object.entries(somaDia).forEach(([d, v]) => { if (!diaTop || v > diaTop.mm) diaTop = { data: d, mm: v }; });
+
+  // dia a dia do mês escolhido (para o gráfico)
+  let diario = null;
+  if (mesSel !== null) {
+    const m = meses[mesSel];
+    const n = new Date(m.ano, m.mes + 1, 0).getDate();
+    diario = { m, n, porDia: Array.from({ length: n }, () => ({})) };
+    escopoRegs.forEach(r => { const d = Number(r.data.slice(8, 10)); diario.porDia[d - 1][r.fazenda_id] = (diario.porDia[d - 1][r.fazenda_id] || 0) + r.mm; });
+  }
+
+  resumoAtual = { meses, porMes, totalMes, totalFaz, totalGeral, diasComChuva: dias.size, maior, diaTop, diario, vazio: escopoRegs.length === 0 };
+  document.getElementById('tituloResumo').innerHTML = mesSel === null
+    ? '<i class="ti ti-chart-bar"></i> Resumo por mês'
+    : `<i class="ti ti-chart-bar"></i> Resumo de ${MESES[meses[mesSel].mes]} de ${meses[mesSel].ano} <span style="color:var(--text-dim);font-weight:400">(dia a dia)</span>`;
   desenharHero(); desenharMetricas(); desenharGrafico(); desenharTabelaMes();
 }
 
@@ -358,11 +391,12 @@ function nomeFaz(id) { return (FAZ.find(f => f.id === id) || {}).nome || '—'; 
 function desenharHero() {
   const r = resumoAtual;
   const maxFaz = Math.max(1, ...FAZ.map(f => r.totalFaz[f.id] || 0));
+  const doMes = mesSel === null ? null : r.meses[mesSel];
   document.getElementById('hero').innerHTML = `
     <div>
-      <div class="hero-label">Chuva no período</div>
+      <div class="hero-label">${doMes ? 'Chuva em ' + MESES[doMes.mes] : 'Chuva no período'}</div>
       <div class="hero-total">${fmt(r.totalGeral)}<small>mm</small></div>
-      <div class="hero-sub">${esc(rotuloPeriodo(periodo))} · soma de todas as fazendas</div>
+      <div class="hero-sub">${doMes ? esc(MESES[doMes.mes] + ' de ' + doMes.ano) : esc(rotuloPeriodo(periodo))} · soma de todas as fazendas</div>
     </div>
     <div class="hero-faz">
       ${FAZ.map((f, i) => {
@@ -376,17 +410,24 @@ function desenharHero() {
 
 function desenharMetricas() {
   const r = resumoAtual;
-  let melhorMes = -1, melhorVal = 0;
-  r.totalMes.forEach((v, i) => { if (v > melhorVal) { melhorVal = v; melhorMes = i; } });
-  const mesTxt = melhorMes >= 0 ? `${MESES[r.meses[melhorMes].mes]} · ${fmt(melhorVal)} mm` : '—';
-  const mediaMes = r.totalMes.filter(v => v > 0).length ? r.totalGeral / r.totalMes.filter(v => v > 0).length : 0;
   const maiorTxt = r.maior ? `${fmt(r.maior.mm)} mm` : '—';
   const maiorSub = r.maior ? `${esc(nomeFaz(r.maior.fazenda_id))} · ${dataBR(r.maior.data)}` : '';
+  let c2, c4;
+  if (mesSel === null) {
+    let melhorMes = -1, melhorVal = 0;
+    r.totalMes.forEach((v, i) => { if (v > melhorVal) { melhorVal = v; melhorMes = i; } });
+    const comChuva = r.totalMes.filter(v => v > 0).length;
+    c2 = { rotulo: 'Mês mais chuvoso', valor: melhorMes >= 0 ? `${MESES[r.meses[melhorMes].mes]} · ${fmt(melhorVal)} mm` : '—', sub: '' };
+    c4 = { rotulo: 'Média dos meses com chuva', valor: `${fmt(comChuva ? r.totalGeral / comChuva : 0)} <span style="font-size:12px;color:var(--text-dim)">mm</span>` };
+  } else {
+    c2 = { rotulo: 'Dia mais chuvoso', valor: r.diaTop ? `${dataBR(r.diaTop.data).slice(0, 5)} · ${fmt(r.diaTop.mm)} mm` : '—', sub: r.diaTop ? 'soma das fazendas' : '' };
+    c4 = { rotulo: 'Média dos dias com chuva', valor: `${fmt(r.diasComChuva ? r.totalGeral / r.diasComChuva : 0)} <span style="font-size:12px;color:var(--text-dim)">mm</span>` };
+  }
   document.getElementById('metricas').innerHTML = `
     <div class="metric"><div class="micon" style="background:var(--info-bg);color:var(--info)"><i class="ti ti-droplet"></i></div><div><div class="mlabel">Dias com chuva</div><div class="mval">${r.diasComChuva}</div></div></div>
-    <div class="metric"><div class="micon" style="background:var(--success-bg);color:var(--success)"><i class="ti ti-calendar-stats"></i></div><div><div class="mlabel">Mês mais chuvoso</div><div class="mval" style="font-size:15px">${mesTxt}</div></div></div>
+    <div class="metric"><div class="micon" style="background:var(--success-bg);color:var(--success)"><i class="ti ti-calendar-stats"></i></div><div><div class="mlabel">${c2.rotulo}</div><div class="mval" style="font-size:15px">${c2.valor}</div><div style="font-size:11px;color:var(--text-dim)">${c2.sub}</div></div></div>
     <div class="metric"><div class="micon" style="background:var(--warning-bg);color:var(--warning)"><i class="ti ti-cloud-storm"></i></div><div><div class="mlabel">Maior chuva num dia</div><div class="mval" style="font-size:16px">${maiorTxt}</div><div style="font-size:11px;color:var(--text-dim)">${maiorSub}</div></div></div>
-    <div class="metric"><div class="micon" style="background:var(--info-bg);color:var(--info)"><i class="ti ti-chart-arrows-vertical"></i></div><div><div class="mlabel">Média dos meses com chuva</div><div class="mval">${fmt(mediaMes)} <span style="font-size:12px;color:var(--text-dim)">mm</span></div></div></div>`;
+    <div class="metric"><div class="micon" style="background:var(--info-bg);color:var(--info)"><i class="ti ti-chart-arrows-vertical"></i></div><div><div class="mlabel">${c4.rotulo}</div><div class="mval">${c4.valor}</div></div></div>`;
 }
 
 const pluginTotal = {
@@ -414,20 +455,25 @@ function desenharGrafico() {
   const css = getComputedStyle(document.documentElement);
   const cMuted = css.getPropertyValue('--text-muted').trim(), cGrid = css.getPropertyValue('--divider').trim(), cText = css.getPropertyValue('--text').trim();
   const stacked = modoGraf === 'empilhado';
+  const diario = r.diario;
   document.getElementById('grafVazio').classList.toggle('on', r.vazio);
   if (grafico) grafico.destroy();
+  const rotulos = diario
+    ? Array.from({ length: diario.n }, (_, i) => String(i + 1))
+    : r.meses.map(m => MESES_ABREV[m.mes] + (periodo.tipo === 'safra' && (m.mes === 0 || (m.mes === 7)) ? ' ' + String(m.ano).slice(2) : ''));
+  const valores = f => (diario ? diario.porDia : r.porMes).map(o => Math.round((o[f.id] || 0) * 10) / 10);
   grafico = new Chart(document.getElementById('grafico'), {
     type: 'bar',
     plugins: [pluginTotal],
     data: {
-      labels: r.meses.map(m => MESES_ABREV[m.mes] + (periodo.tipo === 'safra' && (m.mes === 0 || (m.mes === 7)) ? ' ' + String(m.ano).slice(2) : '')),
+      labels: rotulos,
       datasets: FAZ.map((f, i) => ({
         label: f.nome,
-        data: r.porMes.map(o => Math.round((o[f.id] || 0) * 10) / 10),
+        data: valores(f),
         backgroundColor: corFaz(i),
-        borderRadius: stacked ? 4 : 6,
+        borderRadius: diario ? 3 : (stacked ? 4 : 6),
         borderSkipped: false,
-        maxBarThickness: stacked ? 46 : 26,
+        maxBarThickness: diario ? (stacked ? 22 : 12) : (stacked ? 46 : 26),
       })),
     },
     options: {
@@ -435,7 +481,7 @@ function desenharGrafico() {
       layout: { padding: { top: stacked ? 18 : 6 } },
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { stacked, grid: { display: false }, ticks: { color: cMuted, font: { size: 12 } } },
+        x: { stacked, grid: { display: false }, ticks: { color: cMuted, font: { size: 12 } }, title: { display: !!diario, text: diario ? `dias de ${MESES[diario.m.mes].toLowerCase()}` : '', color: cMuted, font: { size: 11 } } },
         y: { stacked, beginAtZero: true, grace: stacked ? '8%' : 0, grid: { color: cGrid }, border: { display: false },
              ticks: { color: cMuted, callback: v => fmt(v) }, title: { display: true, text: 'milímetros (mm)', color: cMuted, font: { size: 11 } } },
       },
@@ -443,6 +489,7 @@ function desenharGrafico() {
         legend: { position: 'bottom', labels: { color: cText, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16 } },
         tooltip: {
           callbacks: {
+            title: items => diario && items.length ? `Dia ${items[0].label} de ${MESES[diario.m.mes].toLowerCase()}` : (items.length ? items[0].label : ''),
             label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)} mm`,
             footer: items => { const t = items.reduce((s, c) => s + c.parsed.y, 0); return items.length > 1 ? `Total: ${fmt(t)} mm` : ''; },
           },
@@ -456,17 +503,20 @@ function desenharTabelaMes() {
   const r = resumoAtual;
   const css = getComputedStyle(document.documentElement);
   const acc = css.getPropertyValue('--accent').trim();
-  const maxCel = Math.max(1, ...r.porMes.flatMap(o => FAZ.map(f => o[f.id] || 0)));
-  const maxTot = Math.max(1, ...r.totalMes);
+  const indices = mesSel === null ? r.meses.map((_, i) => i) : [mesSel];
+  const maxCel = Math.max(1, ...indices.flatMap(i => FAZ.map(f => r.porMes[i][f.id] || 0)));
+  const maxTot = Math.max(1, ...indices.map(i => r.totalMes[i]));
   document.getElementById('theadMes').innerHTML = `<tr><th>Mês</th>${FAZ.map(f => `<th>${esc(f.nome)}</th>`).join('')}<th>Total geral</th></tr>`;
   const celula = (v, max) => v > 0
     ? `<span class="celula" style="display:inline-block;min-width:62px;padding:3px 8px;background:color-mix(in srgb, ${acc} ${Math.round(8 + (v / max) * 42)}%, transparent)">${fmt(v)}</span>`
     : `<span class="zero">–</span>`;
-  document.getElementById('tbodyMes').innerHTML = r.meses.map((m, i) => `
-    <tr><td>${MESES[m.mes]}${(periodo.tipo === 'safra' && (m.mes === 0 || m.mes === 7)) || m.ano !== periodo.ano ? ` <span style="color:var(--text-dim);font-weight:400">${m.ano}</span>` : ''}</td>
+  document.getElementById('tbodyMes').innerHTML = indices.map(i => {
+    const m = r.meses[i];
+    return `<tr><td>${MESES[m.mes]}${(periodo.tipo === 'safra' && (m.mes === 0 || m.mes === 7)) || m.ano !== periodo.ano || mesSel !== null ? ` <span style="color:var(--text-dim);font-weight:400">${m.ano}</span>` : ''}</td>
       ${FAZ.map(f => `<td>${celula(r.porMes[i][f.id] || 0, maxCel)}</td>`).join('')}
-      <td class="tot-col">${celula(r.totalMes[i], maxTot)}</td></tr>`).join('') + `
-    <tr class="total"><td>Total do período</td>${FAZ.map(f => `<td>${fmt(r.totalFaz[f.id] || 0)}</td>`).join('')}<td>${fmt(r.totalGeral)}</td></tr>`;
+      <td class="tot-col">${celula(r.totalMes[i], maxTot)}</td></tr>`;
+  }).join('') + `
+    <tr class="total"><td>${mesSel === null ? 'Total do período' : 'Total do mês'}</td>${FAZ.map(f => `<td>${fmt(r.totalFaz[f.id] || 0)}</td>`).join('')}<td>${fmt(r.totalGeral)}</td></tr>`;
 }
 
 // ---------- dia a dia ----------
@@ -517,6 +567,12 @@ document.getElementById('btnLimpar').addEventListener('click', limpar);
 document.getElementById('btnNovaFazenda').addEventListener('click', novaFazenda);
 document.getElementById('modoEmp').addEventListener('click', () => { modoGraf = 'empilhado'; document.getElementById('modoEmp').classList.add('active'); document.getElementById('modoLado').classList.remove('active'); if (resumoAtual) desenharGrafico(); });
 document.getElementById('modoLado').addEventListener('click', () => { modoGraf = 'lado'; document.getElementById('modoLado').classList.add('active'); document.getElementById('modoEmp').classList.remove('active'); if (resumoAtual) desenharGrafico(); });
+document.getElementById('selMes').addEventListener('change', () => {
+  const v = document.getElementById('selMes').value;
+  mesSel = v === '' ? null : Number(v);
+  recalcular();
+  if (mesSel !== null) { const m = resumoAtual.meses[mesSel]; mesDia = { ano: m.ano, mes: m.mes }; carregarDiaADia(); }
+});
 document.getElementById('mesAnt').addEventListener('click', () => { mesDia = mesDia.mes === 0 ? { ano: mesDia.ano - 1, mes: 11 } : { ano: mesDia.ano, mes: mesDia.mes - 1 }; carregarDiaADia(); });
 document.getElementById('mesProx').addEventListener('click', () => { mesDia = mesDia.mes === 11 ? { ano: mesDia.ano + 1, mes: 0 } : { ano: mesDia.ano, mes: mesDia.mes + 1 }; carregarDiaADia(); });
 // redesenha o gráfico/tabelas ao trocar o tema claro/escuro
@@ -530,6 +586,7 @@ async function iniciar() {
   mesDia = { ano: h.getFullYear(), mes: h.getMonth() };
   await carregarFazendas();
   await montarSeletorPeriodo();
+  montarSeletorMes();
   await carregarDia(hojeISO());
   await atualizarTudo();
 }
