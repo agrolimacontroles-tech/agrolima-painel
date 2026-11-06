@@ -827,3 +827,15 @@ create index if not exists chuvas_data_idx on chuvas (data);
 
 insert into chuva_fazendas (nome, ordem) values ('Cipó', 1), ('Buriti', 2), ('Canaã', 3)
 on conflict (nome) do nothing;
+
+-- Operadores de máquina (ver maquinas_operadores.sql)
+create table if not exists operadores (
+  id serial primary key,
+  nome text not null unique,
+  valor_hora numeric not null default 10,   -- produção por hora trabalhada (pré-preenche o lançamento)
+  ativo boolean not null default true
+);
+alter table operadores disable row level security;
+
+alter table uso_maquina add column if not exists operador_id int references operadores(id);
+alter table uso_maquina add column if not exists valor_hora_operador numeric not null default 10;  -- valor combinado na data do lançamento
