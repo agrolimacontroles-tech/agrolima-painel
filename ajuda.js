@@ -62,7 +62,7 @@
       nome: 'Fábrica de Sal',
       resumo: 'Fabrica o sal mineral/suplemento que o gado das fazendas consome e vende às empresas do grupo.',
       detalhes: [
-        'Controle na tela Fábrica de Sal: fórmulas (receitas do sal), produção, consumo por fazenda e por manga, vendas e estoque de insumos.',
+        'Controle na tela Fábrica de Sal: fórmulas (receitas do sal), produção, vendas e estoque de insumos. O consumo de sal por manga e por fazenda é lançado no SISBOI (tela Consumo).',
         'Insumos típicos: soja, DDG, ureia, calcário e outros ingredientes comprados para a fórmula.',
         'A produção dá baixa automática no estoque dos insumos usados.'
       ]
@@ -407,8 +407,6 @@
     fabricasal: {
       'fórmulas': 'Receitas do sal: quais insumos e quantas quilos de cada entram em cada produto.',
       'produção': 'Lotes de sal fabricados. Cada produção desconta automaticamente os insumos do estoque.',
-      'consumo por fazenda (r$)': 'Quanto cada fazenda consumiu de sal, em kg e em reais.',
-      'consumo por manga': 'Acompanhamento do cocho: quanto de sal foi fornecido e sobrou em cada manga, e o consumo por cabeça por dia.',
       'vendas': 'Sal vendido para empresas do grupo.',
       'estoque de insumos': 'Quanto resta de cada ingrediente (soja, DDG, ureia, calcário...).',
       'nome da fórmula': 'Nome ou número da fórmula (ex.: Fórmula 1). Na produção você escolhe só o nome e ela já traz os insumos.',
