@@ -76,7 +76,7 @@ document.getElementById('mainContent').innerHTML = `
 
   <div id="abaProducao" style="display:none">
     <div class="card">
-      <div class="cardh"><i class="ti ti-plus"></i> Nova produção</div>
+      <div class="cardh" id="tituloProducao"><i class="ti ti-plus"></i> Nova produção</div>
       <div class="cardb">
         <div class="frow cols-3">
           <div class="fgroup">
@@ -111,6 +111,7 @@ document.getElementById('mainContent').innerHTML = `
 
         <div style="margin-top:14px">
           <button class="btn btn-primary" id="btnAddProducao"><i class="ti ti-check"></i> Salvar produção</button>
+          <button class="btn btn-secondary" id="btnCancelarEdicao" type="button" style="display:none;margin-left:8px" onclick="cancelarEdicaoProducao()">Cancelar edição</button>
           <span id="msgProducao" class="msg" style="display:inline-block;margin-left:10px"></span>
         </div>
       </div>
@@ -467,7 +468,8 @@ function recalcularProducao() {
 
   if (totalKg > 0) {
     document.getElementById('qpLoteKg').value = Number(totalKg.toFixed(2));
-    document.getElementById('qpCustoTotal').value = totalCusto > 0 ? Number(totalCusto.toFixed(2)) : '';
+    // só preenche o custo total quando TODOS os insumos têm preço; senão mantém o que já estava (evita gravar soma parcial)
+    if (totalCusto > 0 && !semPreco) document.getElementById('qpCustoTotal').value = Number(totalCusto.toFixed(2));
   }
 }
 
@@ -531,6 +533,8 @@ document.getElementById('btnAddProducao').addEventListener('click', async () => 
 
   const linhasValidas = linhasInsumosProducao.filter(l => l.insumo_id && l.quantidade > 0);
 
+  if (EDIT_PRODUCAO_ID) { await salvarEdicaoProducao(data, produto, lote_kg, linhasValidas, msg); return; }
+
   const faltando = linhasValidas.filter(l => {
     const atual = ESTOQUE_MAP.get(l.insumo_id) || 0;
     return l.quantidade > atual;
@@ -567,16 +571,120 @@ document.getElementById('btnAddProducao').addEventListener('click', async () => 
 
   msg.textContent = 'Produção salva! Estoque atualizado.';
   msg.className = 'msg show success';
+  limparFormProducao();
+  carregarProducoes();
+  carregarEstoque();
+  setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 4000);
+});
+
+function limparFormProducao() {
   ['qpProduto', 'qpLoteKg', 'qpCustoTotal', 'qpObservacao'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('qpData').value = hojeISO();
   document.getElementById('qpFormula').value = '';
   document.getElementById('previewFormula').style.display = 'none';
   document.getElementById('totaisProducao').innerHTML = '';
   linhasInsumosProducao = [];
   adicionarLinhaInsumo();
+  EDIT_PRODUCAO_ID = null;
+  document.getElementById('tituloProducao').innerHTML = '<i class="ti ti-plus"></i> Nova produção';
+  document.getElementById('btnAddProducao').innerHTML = '<i class="ti ti-check"></i> Salvar produção';
+  document.getElementById('btnCancelarEdicao').style.display = 'none';
+}
+
+// ---------- Editar uma produção já salva ----------
+let EDIT_PRODUCAO_ID = null;
+let PRODUCOES_CACHE = [];
+
+function editarProducao(id) {
+  const pr = PRODUCOES_CACHE.find(x => x.id === id);
+  if (!pr) return;
+  EDIT_PRODUCAO_ID = id;
+  document.getElementById('qpData').value = pr.data;
+  document.getElementById('qpProduto').value = pr.produto || '';
+  document.getElementById('qpFormula').value = pr.formula_id || '';
+  document.getElementById('previewFormula').style.display = 'none';
+  document.getElementById('qpLoteKg').value = pr.lote_kg ?? '';
+  document.getElementById('qpCustoTotal').value = pr.custo_total ?? '';
+  document.getElementById('qpObservacao').value = pr.observacao || '';
+  linhasInsumosProducao = (PRODUCAO_INSUMOS_CACHE.get(id) || []).map(i => {
+    const ins = insumoPorId(i.insumo_id);
+    const kgSaco = Number(ins.kg_por_saco) || 0;
+    const kg = Number(i.quantidade_usada) || 0;
+    // preço do saco da época da produção (custo guardado ÷ sacos); sem custo guardado, usa o do cadastro
+    const preco = i.custo && kgSaco > 0 && kg > 0 ? Number(i.custo) / (kg / kgSaco) : Number(ins.preco_saco) || 0;
+    return { insumo_id: i.insumo_id, quantidade: kg, kg_por_saco: kgSaco, preco_saco: Number(preco.toFixed(4)) };
+  });
+  if (linhasInsumosProducao.length === 0) adicionarLinhaInsumo();
+  renderLinhasInsumosProducao();
+  document.getElementById('tituloProducao').innerHTML = `<i class="ti ti-pencil"></i> Editando produção de ${new Date(pr.data + 'T00:00:00').toLocaleDateString('pt-BR')} — ${pr.produto}`;
+  document.getElementById('btnAddProducao').innerHTML = '<i class="ti ti-check"></i> Salvar alterações';
+  document.getElementById('btnCancelarEdicao').style.display = '';
+  document.getElementById('tituloProducao').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelarEdicaoProducao() {
+  limparFormProducao();
+  const msg = document.getElementById('msgProducao');
+  msg.textContent = ''; msg.className = 'msg';
+}
+
+async function salvarEdicaoProducao(data, produto, lote_kg, linhasValidas, msg) {
+  const id = EDIT_PRODUCAO_ID;
+  // o que essa produção já tinha baixado do estoque
+  const antes = new Map();
+  (PRODUCAO_INSUMOS_CACHE.get(id) || []).forEach(i => antes.set(i.insumo_id, (antes.get(i.insumo_id) || 0) + Number(i.quantidade_usada)));
+  const depois = new Map();
+  linhasValidas.forEach(l => depois.set(l.insumo_id, (depois.get(l.insumo_id) || 0) + Number(l.quantidade)));
+
+  // estoque disponível para essa produção = estoque atual + o que ela mesma já tinha baixado
+  const faltando = [...depois.entries()].filter(([ins, qtd]) => qtd > (ESTOQUE_MAP.get(ins) || 0) + (antes.get(ins) || 0));
+  if (faltando.length > 0) {
+    const texto = faltando.map(([ins, qtd]) => `${nomeInsumo(ins)} (tem ${(ESTOQUE_MAP.get(ins) || 0) + (antes.get(ins) || 0)}, precisa ${qtd})`).join(', ');
+    if (!confirm(`Estoque insuficiente para: ${texto}. Salvar mesmo assim? (o estoque desses insumos vai ficar negativo)`)) return;
+  }
+
+  const btn = document.getElementById('btnAddProducao');
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('sal_producoes').update({
+    data, produto, lote_kg,
+    formula_id: Number(document.getElementById('qpFormula').value) || null,
+    custo_total: parseFloat(document.getElementById('qpCustoTotal').value) || null,
+    observacao: document.getElementById('qpObservacao').value || null,
+  }).eq('id', id);
+  if (error) {
+    btn.disabled = false;
+    msg.textContent = 'Erro ao salvar: ' + error.message;
+    msg.className = 'msg show error';
+    return;
+  }
+
+  // refaz os insumos usados e as baixas automáticas dessa produção
+  await supabaseClient.from('sal_producao_insumos').delete().eq('producao_id', id);
+  await supabaseClient.from('sal_estoque_movimentos').delete().eq('producao_id', id);
+  for (const linha of linhasValidas) {
+    await supabaseClient.from('sal_producao_insumos').insert({ producao_id: id, insumo_id: linha.insumo_id, quantidade_usada: linha.quantidade, custo: calcLinha(linha).custo || null });
+    const ins = insumoPorId(linha.insumo_id);
+    if ((linha.kg_por_saco > 0 && linha.kg_por_saco !== Number(ins.kg_por_saco)) || (linha.preco_saco > 0 && linha.preco_saco !== Number(ins.preco_saco))) {
+      await supabaseClient.from('sal_insumos').update({ kg_por_saco: linha.kg_por_saco || null, preco_saco: linha.preco_saco || null }).eq('id', linha.insumo_id);
+      ins.kg_por_saco = linha.kg_por_saco; ins.preco_saco = linha.preco_saco;
+    }
+    await supabaseClient.from('sal_estoque_movimentos').insert({ insumo_id: linha.insumo_id, tipo: 'saida', quantidade: linha.quantidade, data, producao_id: id, observacao: `Baixa automática — produção de ${produto}` });
+  }
+  // devolve ao estoque o que tinha saído e baixa o novo (só onde a quantidade mudou)
+  for (const ins of new Set([...antes.keys(), ...depois.keys()])) {
+    const a = antes.get(ins) || 0, d = depois.get(ins) || 0;
+    if (a === d) continue;
+    await supabaseClient.from('sal_estoque_insumos').upsert({ insumo_id: ins, quantidade_atual: (ESTOQUE_MAP.get(ins) || 0) + a - d });
+  }
+
+  btn.disabled = false;
+  msg.textContent = 'Produção atualizada! Estoque ajustado.';
+  msg.className = 'msg show success';
+  limparFormProducao();
   carregarProducoes();
   carregarEstoque();
   setTimeout(() => { msg.textContent = ''; msg.className = 'msg'; }, 4000);
-});
+}
 
 let PRODUCAO_INSUMOS_CACHE = new Map(); // producao_id -> [{insumo_id, quantidade_usada}]
 async function carregarProducoes() {
@@ -591,6 +699,7 @@ async function carregarProducoes() {
     PRODUCAO_INSUMOS_CACHE.get(i.producao_id).push(i);
   });
 
+  PRODUCOES_CACHE = data;
   document.getElementById('tbodyProducoes').innerHTML = data.length === 0
     ? '<tr class="empty-row"><td colspan="7">Nenhuma produção registrada.</td></tr>'
     : data.map(p => {
@@ -600,7 +709,7 @@ async function carregarProducoes() {
         <tr>
           <td>${new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td>${p.produto}</td>
           <td style="text-align:right">${p.lote_kg}</td><td style="font-size:12px">${textoInsumos}</td><td style="text-align:right">${formatarMoeda(p.custo_total)}</td><td style="text-align:right">${p.custo_total && p.lote_kg ? formatarMoeda(p.custo_total / p.lote_kg) : '—'}</td>
-          <td><button class="btn btn-danger" style="padding:4px 10px" onclick="excluirProducao(${p.id})"><i class="ti ti-trash"></i></button></td>
+          <td style="white-space:nowrap"><button class="btn btn-secondary" style="padding:4px 10px" title="Editar" onclick="editarProducao(${p.id})"><i class="ti ti-pencil"></i></button> <button class="btn btn-danger" style="padding:4px 10px" title="Excluir" onclick="excluirProducao(${p.id})"><i class="ti ti-trash"></i></button></td>
         </tr>
       `;
     }).join('');
