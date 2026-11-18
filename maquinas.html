@@ -810,12 +810,17 @@ async function carregarRelatorio() {
   ]);
 
   const porMaquina = new Map();
-  MAQUINAS.forEach(m => porMaquina.set(m.id, { nome: m.nome, tipo: m.tipo, horas: 0, receita: 0, operador: 0, combustivel: 0, manutencao: 0 }));
+  MAQUINAS.forEach(m => porMaquina.set(m.id, { nome: m.nome, tipo: m.tipo, horas: 0, horasMaq: 0, horasConf: 0, horasOutras: 0, receita: 0, operador: 0, combustivel: 0, manutencao: 0 }));
 
   usos.forEach(u => {
     const reg = porMaquina.get(u.maquina_id);
     if (!reg) return;
     reg.horas += horasDe(u);
+    // para quem foi o serviço: empresa Máquinas (uso próprio), Confinamento ou outras
+    const nomeEmp = nomeEmpresa(u.empresa_beneficiada_id);
+    if (/confinamento/i.test(nomeEmp)) reg.horasConf += horasDe(u);
+    else if (/m[aá]quinas/i.test(nomeEmp)) reg.horasMaq += horasDe(u);
+    else reg.horasOutras += horasDe(u);
     reg.receita += valorMaquina(u);
     reg.operador += valorOperador(u);
   });
@@ -853,6 +858,9 @@ async function carregarRelatorio() {
           <div><div class="maquina-nome">${m.nome}</div><div class="maquina-tipo">${m.tipo || ''}</div></div>
         </div>
         <div class="maquina-linha"><span>Horas trabalhadas</span><b>${reg.horas.toFixed(1)} h</b></div>
+        <div class="maquina-linha"><span>&nbsp;&nbsp;↳ para Máquinas</span><b>${reg.horasMaq.toFixed(1)} h</b></div>
+        <div class="maquina-linha"><span>&nbsp;&nbsp;↳ para Confinamento</span><b>${reg.horasConf.toFixed(1)} h</b></div>
+        ${reg.horasOutras > 0 ? `<div class="maquina-linha"><span>&nbsp;&nbsp;↳ para outras empresas</span><b>${reg.horasOutras.toFixed(1)} h</b></div>` : ''}
         <div class="maquina-linha"><span>Receita</span><b style="color:var(--success)">${formatarMoeda(reg.receita)}</b></div>
         <div class="maquina-linha"><span>Operador</span><b style="color:var(--danger)">${formatarMoeda(reg.operador)}</b></div>
         <div class="maquina-linha"><span>Abastecimento</span><b style="color:var(--danger)">${formatarMoeda(reg.combustivel)}</b></div>
